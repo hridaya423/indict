@@ -106,3 +106,28 @@ def cos(a: list[float], b: list[float]) -> float:
     na = sum(x * x for x in a) ** 0.5
     nb = sum(y * y for y in b) ** 0.5
     return dot / (na * nb) if na and nb else 0.0
+
+
+def rerank(query: str, docs: list[str]) -> list[float] | None:
+    """Cross-encoder relevance scores via SIE's /v1/score (aligned with
+    input order). None = no key / endpoint trouble — callers fall back to
+    their existing ordering. Never raises."""
+    if "SIE_API_KEY" not in os.environ or not docs:
+        return None
+    key = os.environ["SIE_API_KEY"]
+    base = os.environ.get("CRS_SIE_BASE_URL",
+                          "https://api.superlinked.com").rstrip("/")
+    model = os.environ.get("CRS_SIE_RERANK_MODEL", "Qwen/Qwen3-Reranker-4B")
+    body = {"query": {"text": query},
+            "items": [{"id": str(i), "text": d} for i, d in enumerate(docs)]}
+    try:
+        r = _post(f"{base}/v1/score/{model}", key, body)
+        if r.status_code != 200:
+            print(f"[sie] rerank unavailable (HTTP {r.status_code})", flush=True)
+            return None
+        by_id = {e.get("item_id"): float(e.get("score", 0.0))
+                 for e in r.json().get("scores", [])}
+        return [by_id.get(str(i), 0.0) for i in range(len(docs))]
+    except Exception as e:
+        print(f"[sie] rerank unavailable: {e}", flush=True)
+        return None

@@ -92,7 +92,25 @@ def prove(root: Path, resolver: Resolver, client: Client | None,
     cap = cap if cap is not None else int(os.environ.get("CRS_POC_CAP", "10"))
     todo = sorted([f for f in findings if f.status == "adjudicated"],
                   key=lambda f: ({"critical": 0, "high": 1}.get(f.severity, 2),
-                                 -f.confidence))[:cap]
+                                 -f.confidence))
+    if len(todo) > cap:
+        # more candidates than PoC slots — a cross-encoder picks which
+        # findings deserve the expensive verification, replacing
+        # model-asserted confidence with measured query relevance
+        try:
+            from . import sie as _sie
+            scores = _sie.rerank(
+                "remotely exploitable vulnerability with attacker-controlled "
+                "input reaching a dangerous sink",
+                [f"{f.title}\n{(f.detail or '')[:400]}" for f in todo])
+            if scores is not None:
+                order = sorted(range(len(todo)), key=lambda i: -scores[i])
+                todo = [todo[i] for i in order]
+                print(f"[poc] reranker prioritized {len(todo)} findings "
+                      f"(SIE cross-encoder)", flush=True)
+        except Exception as e:
+            print(f"[poc] rerank failed: {e}", flush=True)
+    todo = todo[:cap]
     for f in todo:
         if deadline and time.time() > deadline:
             print("[poc] budget reached — remaining findings stay adjudicated",
