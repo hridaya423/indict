@@ -19,32 +19,42 @@
       "icon": "folder",
       "body": "the code we guard",
       "kind": "terminal",
-      "accent": "cyan"
+      "accent": "cyan",
+      "x": 460,
+      "y": 195
     },
     {
       "id": "watch",
       "label": "Watch",
       "icon": "eye",
       "body": "polls for new commits",
-      "accent": "cyan"
+      "accent": "cyan",
+      "x": 460,
+      "y": 330
     },
     {
       "id": "scan",
       "label": "Scan",
       "icon": "ingest",
-      "body": "clone \u00b7 inventory \u00b7 index"
+      "body": "clone \u00b7 inventory \u00b7 index",
+      "x": 460,
+      "y": 465
     },
     {
       "id": "sweep",
       "label": "Sweep",
       "icon": "scan",
-      "body": "semgrep \u00b7 secrets \u00b7 dep CVEs"
+      "body": "semgrep \u00b7 secrets \u00b7 dep CVEs",
+      "x": 810,
+      "y": 465
     },
     {
       "id": "rank",
       "label": "Rank",
       "icon": "score",
-      "body": "suspicious files first,\nrisk + semantic score"
+      "body": "suspicious files first,\nrisk + semantic score",
+      "x": 460,
+      "y": 600
     },
     {
       "id": "hunter",
@@ -85,57 +95,75 @@
       "id": "dedup",
       "label": "Dedup",
       "icon": "merge",
-      "body": "same bug \u2192 one card"
+      "body": "same bug \u2192 one card",
+      "x": 460,
+      "y": 1240
     },
     {
       "id": "judge",
       "label": "Judge",
       "icon": "guardrail",
-      "body": "call chain must resolve;\na 2nd AI tries to disprove it"
+      "body": "call chain must resolve;\na 2nd AI tries to disprove it",
+      "x": 460,
+      "y": 1380
     },
     {
       "id": "gate",
       "label": "Real?",
-      "kind": "decision"
+      "kind": "decision",
+      "x": 460,
+      "y": 1520
     },
     {
       "id": "dropped",
       "label": "Dropped",
       "kind": "terminal",
       "accent": "pink",
-      "body": "fake or unproven"
+      "body": "fake or unproven",
+      "x": 150,
+      "y": 1520
     },
     {
       "id": "prove",
       "label": "Prove",
       "icon": "sandbox",
       "body": "exploit in a locked box \u2014\nthe claimed line must run",
-      "accent": "amber"
+      "accent": "amber",
+      "x": 460,
+      "y": 1660
     },
     {
       "id": "report",
       "label": "Report",
       "icon": "clipboard",
-      "body": "markdown \u00b7 SARIF \u00b7 alerts.jsonl"
+      "body": "markdown \u00b7 SARIF \u00b7 alerts.jsonl",
+      "x": 460,
+      "y": 1800
     },
     {
       "id": "notify",
       "label": "Page + file issue",
       "icon": "webhook",
       "body": "critical \u2192 SMS + call\n4B drafts the issue",
-      "accent": "cyan"
+      "accent": "cyan",
+      "x": 460,
+      "y": 1940
     },
     {
       "id": "fixer",
       "label": "Fixer agent",
       "icon": "agent",
       "body": "your agent patches it\nin an isolated worktree",
-      "accent": "purple"
+      "accent": "purple",
+      "x": 460,
+      "y": 2080
     },
     {
       "id": "fixgate",
       "label": "Fix real?",
-      "kind": "decision"
+      "kind": "decision",
+      "x": 460,
+      "y": 2210
     },
     {
       "id": "verified",
@@ -143,43 +171,47 @@
       "kind": "terminal",
       "accent": "green",
       "body": "PoC dead \u00b7 patch rescans clean\nverdict lands on the issue",
-      "x": 500,
-      "y": 3090
+      "x": 460,
+      "y": 2350
     },
     {
       "id": "models",
       "label": "Open models",
       "icon": "model",
       "body": "Devin ACP + SIE\nthink \u00b7 embed \u00b7 rerank",
-      "accent": "muted"
+      "accent": "muted",
+      "x": 150,
+      "y": 465
     },
     {
       "id": "ann-rank",
       "label": "Superlinked",
       "body": "bge-m3 \u2014 semantic boost",
-      "x": 1000,
-      "y": 938
+      "x": 810,
+      "y": 600
     },
     {
       "id": "ann-prove",
       "label": "Superlinked",
       "body": "Qwen3-Reranker-4B \u2014 picks the order",
-      "x": 700,
-      "y": 2420
+      "x": 810,
+      "y": 1660
     },
     {
       "id": "ann-notify",
       "label": "Superlinked",
       "body": "Qwen3.5-4B \u2014 drafts the issue",
-      "x": 700,
-      "y": 2720
+      "x": 810,
+      "y": 1940
     },
     {
       "id": "memory",
       "label": "Memory",
       "icon": "db",
       "body": "last sha + every known bug",
-      "accent": "muted"
+      "accent": "muted",
+      "x": 150,
+      "y": 330
     },
     {
       "id": "pool",
