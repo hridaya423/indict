@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import shutil
@@ -147,10 +148,22 @@ def status(findings_root: Path | None = None) -> None:
             alerts_n = sum(1 for l in (d / "alerts.jsonl").read_text()
                            .splitlines() if l.strip())
         ver = st["counts"].get("verified", 0)
+        adj = st["counts"].get("adjudicated", 0)
+        if not st["last_scan"]:
+            # dirs scanned before state tracking existed — counts from
+            # findings.jsonl so the estate view never shows false zeros
+            try:
+                rows = [json.loads(l) for l in
+                        (d / "findings.jsonl").read_text().splitlines() if l]
+                ver = sum(1 for f in rows if f.get("status") == "verified")
+                adj = sum(1 for f in rows
+                          if f.get("status") == "adjudicated")
+            except Exception:
+                pass
         age = "never" if not st["last_scan"] else _age(now - st["last_scan"])
         print(f"{'🟢' if ver else '⚪'} {d.name:30} "
               f"last={(st['last_sha'] or '')[:8] or '-'} scan={age} "
-              f"verified={ver} adj={st['counts'].get('adjudicated', 0)} "
+              f"verified={ver} adj={adj} "
               f"alerts={alerts_n}")
 
 
