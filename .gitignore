@@ -6,3 +6,6 @@ findings/
 calibrate/repos/
 .llmcache/
 watch.yaml
+
+# competition target clones — analysis only, never committed
+targets/
