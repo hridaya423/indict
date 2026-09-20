@@ -25,14 +25,21 @@
       "id": "watch",
       "label": "Watch",
       "icon": "eye",
-      "body": "polls commits \u2014 remembers\nlast sha + known bugs",
+      "body": "polls for new commits",
       "accent": "cyan"
+    },
+    {
+      "id": "memory",
+      "label": "Memory",
+      "icon": "db",
+      "body": "last commit + known bugs",
+      "accent": "muted"
     },
     {
       "id": "scan",
       "label": "Scan",
       "icon": "ingest",
-      "body": "clone \u00b7 map \u00b7 index"
+      "body": "clone \u00b7 map \u00b7 build the file index"
     },
     {
       "id": "sweep",
@@ -44,7 +51,7 @@
       "id": "rank",
       "label": "Rank",
       "icon": "score",
-      "body": "suspicious files first"
+      "body": "suspicious files first\n(semantic embeddings)"
     },
     {
       "id": "hunter",
@@ -64,7 +71,7 @@
       "id": "taintgen",
       "label": "Taintgen",
       "icon": "gear",
-      "body": "writes custom scan rules,\nruns them",
+      "body": "writes custom scan rules,\nruns them on the repo",
       "accent": "purple"
     },
     {
@@ -82,10 +89,16 @@
       "accent": "purple"
     },
     {
+      "id": "pool",
+      "label": "Candidate pile",
+      "icon": "queue",
+      "body": "every engine drops leads here"
+    },
+    {
       "id": "dedup",
       "label": "Dedup",
       "icon": "merge",
-      "body": "candidate pile \u2192\none card per bug"
+      "body": "same bug \u2192 one card"
     },
     {
       "id": "judge",
@@ -145,29 +158,11 @@
       "body": "PoC dead \u00b7 patch rescans clean\nverdict lands on the issue"
     },
     {
-      "id": "acp",
-      "label": "Devin ACP",
+      "id": "models",
+      "label": "Open models",
       "icon": "model",
-      "body": "swe-2-max \u2014 reasoning\nfor the engine hunt",
+      "body": "Devin ACP + SIE\nthink \u00b7 embed \u00b7 rerank",
       "accent": "muted"
-    },
-    {
-      "id": "sie-embed",
-      "label": "Superlinked",
-      "icon_file": "superlinked-logo.svg",
-      "body": "bge-m3 embeddings \u2014\nsemantic rank + dedup"
-    },
-    {
-      "id": "sie-rerank",
-      "label": "Superlinked",
-      "icon_file": "superlinked-logo.svg",
-      "body": "Qwen3-Reranker-4B \u2014\npicks the PoC order"
-    },
-    {
-      "id": "sie-draft",
-      "label": "Superlinked",
-      "icon_file": "superlinked-logo.svg",
-      "body": "Qwen3.5-4B \u2014\ndrafts the GitHub issue"
     }
   ],
   "edges": [
@@ -177,8 +172,14 @@
     },
     {
       "from": "watch",
+      "to": "memory",
+      "label": "remember",
+      "style": "dashed"
+    },
+    {
+      "from": "watch",
       "to": "scan",
-      "label": "diff rescan"
+      "label": "scan what changed"
     },
     {
       "from": "scan",
@@ -191,7 +192,7 @@
     },
     {
       "from": "sweep",
-      "to": "dedup",
+      "to": "pool",
       "label": "findings"
     },
     {
@@ -216,22 +217,26 @@
     },
     {
       "from": "hunter",
-      "to": "dedup"
+      "to": "pool"
     },
     {
       "from": "explorer",
-      "to": "dedup"
+      "to": "pool"
     },
     {
       "from": "taintgen",
-      "to": "dedup"
+      "to": "pool"
     },
     {
       "from": "variant",
-      "to": "dedup"
+      "to": "pool"
     },
     {
       "from": "fuzzlite",
+      "to": "pool"
+    },
+    {
+      "from": "pool",
       "to": "dedup"
     },
     {
@@ -286,26 +291,11 @@
       "accent": "pink"
     },
     {
-      "from": "acp",
+      "from": "models",
       "to": "hunter",
-      "label": "reasoning",
-      "style": "dashed",
-      "accent": "purple"
-    },
-    {
-      "from": "sie-embed",
-      "to": "rank",
-      "label": "semantic boost"
-    },
-    {
-      "from": "sie-rerank",
-      "to": "prove",
-      "label": "rerank"
-    },
-    {
-      "from": "sie-draft",
-      "to": "notify",
-      "label": "draft"
+      "label": "powers the AI",
+      "accent": "purple",
+      "style": "dashed"
     },
     {
       "from": "report",
