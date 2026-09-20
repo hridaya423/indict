@@ -6,8 +6,10 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import time
 
-from .pipeline import ALL_ENGINES, run
+from . import state
+from .pipeline import ALL_ENGINES, FINDINGS, run
 
 
 def main() -> None:
@@ -54,9 +56,28 @@ def main() -> None:
                          "dir for test scans so golden state survives")
     ap.add_argument("--doctor", action="store_true",
                     help="check prereqs: tools, endpoints, docker images")
+    ap.add_argument("--status", action="store_true",
+                    help="one-line health per scanned repo: last sha, scan "
+                         "age, verified/adjudicated counts, alert count")
+    ap.add_argument("--watch", action="store_true",
+                    help="daemon — rescan watch.yaml repos on every new "
+                         "commit (Ctrl-C to stop)")
+    ap.add_argument("--watch-once", action="store_true",
+                    help="run a single watch cycle (testing; env "
+                         "CRS_WATCH_ONCE=1 works too)")
+    ap.add_argument("--registry", default="watch.yaml", metavar="YAML",
+                    help="watch registry path (default watch.yaml)")
     a = ap.parse_args()
     if a.doctor:
         doctor()
+        return
+    if a.status:
+        status()
+        return
+    if a.watch or a.watch_once:
+        from . import watch
+        watch.main(Path(a.registry).expanduser(), models=a.models,
+                   budget=a.hunt_budget, once=a.watch_once)
         return
     if not a.target:
         ap.error("target required")
@@ -101,6 +122,36 @@ def main() -> None:
         extra_models=extra, hunt_budget_min=a.hunt_budget,
         out_root=Path(a.out).expanduser() if a.out else None,
         resume=a.resume)
+
+
+def _age(secs: float) -> str:
+    for unit, div in (("d", 86400), ("h", 3600), ("m", 60)):
+        if secs >= div:
+            return f"{int(secs // div)}{unit} ago"
+    return "just now"
+
+
+def status(findings_root: Path | None = None) -> None:
+    root = findings_root or FINDINGS
+    dirs = sorted(d for d in root.glob("*")
+                  if d.is_dir() and (d / "findings.jsonl").exists()) \
+        if root.exists() else []
+    if not dirs:
+        print("no scans yet — run ./scan <target>")
+        return
+    now = time.time()
+    for d in dirs:
+        st = state.read(d)
+        alerts_n = 0
+        if (d / "alerts.jsonl").exists():
+            alerts_n = sum(1 for l in (d / "alerts.jsonl").read_text()
+                           .splitlines() if l.strip())
+        ver = st["counts"].get("verified", 0)
+        age = "never" if not st["last_scan"] else _age(now - st["last_scan"])
+        print(f"{'🟢' if ver else '⚪'} {d.name:30} "
+              f"last={(st['last_sha'] or '')[:8] or '-'} scan={age} "
+              f"verified={ver} adj={st['counts'].get('adjudicated', 0)} "
+              f"alerts={alerts_n}")
 
 
 def doctor() -> None:

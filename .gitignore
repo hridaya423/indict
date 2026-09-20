@@ -5,3 +5,4 @@ findings/
 .devin/goal/
 calibrate/repos/
 .llmcache/
+watch.yaml

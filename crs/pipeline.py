@@ -12,6 +12,7 @@ from pathlib import Path
 
 import engines
 from . import adjudicate, consensus, poc, rank, recon, report
+from . import state as repo_state
 from .llms import Client, load_models
 from .resolver import Resolver
 from .store import Finding, append as store_append, dump, load
@@ -209,6 +210,10 @@ def run(target: str, engine_names: list[str] | None = None, workers: int = 4,
         c.tags = list(dict.fromkeys(c.tags))  # re-pooling can re-append tags
     summary = report.render(cands, out_dir, root.name, root)
     dump(out_dir / "findings.jsonl", cands)
+    try:  # state snapshot is ops sugar — must never break a scan
+        repo_state.record(out_dir, root, cands)
+    except Exception as e:
+        print(f"[state] record failed: {e}")
     print(json.dumps(summary, indent=2, default=dict))
     if client is not None and client.stats:
         for name, s in sorted(client.stats.items()):

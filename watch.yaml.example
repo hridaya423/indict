@@ -1,0 +1,8 @@
+# watch registry — repos the daemon rescans on every new commit.
+# Watch scans run the deterministic sweep only (no LLM stages) — run LLM
+# hunts manually via ./scan <target>; alerts fire on new findings either way.
+# Start with: ./scan --watch   (single cycle for testing: ./scan --watch-once)
+- url: https://github.com/softdevteam/snare
+  # models: [sie]          # optional: restrict scan models
+  # budget: 45             # optional: hunt-budget minutes
+- url: /absolute/local/path/to/repo
