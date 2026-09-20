@@ -1,0 +1,43 @@
+{
+  "unknownRunRequested": "does-not-exist",
+  "returnedRun": {
+    "id": "20260101-000000-11111",
+    "state": "completed",
+    "freshness": "unavailable",
+    "revision": "a1b2c3d4e5f6"
+  },
+  "caseArtifactNames": [
+    "output.txt",
+    "poc.py",
+    "verification.jsonl"
+  ],
+  "tailCount": 3,
+  "eventsReturnedForTsCursor": 43,
+  "eventsTotal": 43,
+  "eventNextCursor": null,
+  "historicalCaseAfterNewerVerification": {
+    "requestedRun": "20260101-000000-11111",
+    "displayedRun": {
+      "id": "20260101-000000-11111",
+      "state": "completed",
+      "freshness": "unavailable",
+      "revision": "a1b2c3d4e5f6"
+    },
+    "basis": {
+      "run": "newer-run",
+      "outcome": "failed",
+      "signal": "DIFFERENT-RUN-SIGNAL",
+      "mode": "host"
+    },
+    "reproduced": true
+  },
+  "sourceSha256": {
+    "dashboard/src/proof.tsx": "e45f052f6ad1b10951cab631fc70cdcae23c9b6d7daa50b9ccf098f19448e151",
+    "dashboard/src/components.tsx": "0069eed8df289d18ca4ee11fd3b8ad519454d0a29c175f4fb36e3aa0830ce812",
+    "dashboard/src/runview.tsx": "fcb175c6be446ade38f1b69901edbc41636e65c9be6d428ebc6c09f980c8e730",
+    "dashboard/src/router.tsx": "7ba132d6939dbca99b456918b6f5454d8b0eedebdc0d8d2bc90a2a3f9a2d74fb",
+    "dashboard/tests/visual.spec.ts": "c3fb15cd31d2f8f37aecd425235f1ef0f812d6e92cdafd91c65b47b99a2fe5d4",
+    "indictment/board_data.py": "a94712c4fa35c8a326c951cac6c18dccee8404b796d981a427a7cfd8639fa4de"
+  },
+  "head": "5c8645c1b932007485313b4319abb2d7a76962cc"
+}

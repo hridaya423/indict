@@ -18,7 +18,9 @@ export default defineConfig({
     command: `uv run python -c "from indictment.board import serve; serve('${FIXTURE}', 8700)"`,
     cwd: join(HERE, '..'),
     url: 'http://127.0.0.1:8700/api/v1/overview',
-    reuseExistingServer: true,
+    // never accept whichever service happens to sit on the port — a foreign
+    // server's fixture identity can't be verified, so fail instead
+    reuseExistingServer: false,
     timeout: 20_000,
   },
   projects: [

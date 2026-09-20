@@ -2,12 +2,13 @@ import { useCallback, useRef, useState } from 'react'
 import { apiGet, useResource, qs } from '../api'
 import type { ListResp, RunSummary } from '../types'
 import { useRepoParam, useRoute, navigate } from '../router'
-import { Badge, DataState, RunStateBadge } from '../components'
-import { fmtDur, fmtFull, shortRun, shortSha } from '../format'
+import { Badge, DataState, HealthBadge, RunStateBadge } from '../components'
+import { fmtDur, fmtEta, fmtFull, shortRun, shortSha } from '../format'
 
 const STATE_PILLS = [
-  { id: '', label: 'All' }, { id: 'running', label: 'Running' },
-  { id: 'completed', label: 'Completed' }, { id: 'failed', label: 'Failed' },
+  { id: '', label: 'All' }, { id: 'running', label: 'Active' },
+  { id: 'stale', label: 'Stale' }, { id: 'completed', label: 'Completed' },
+  { id: 'failed', label: 'Failed' }, { id: 'degraded', label: 'Degraded' },
   { id: 'unknown', label: 'Unknown' },
 ]
 
@@ -18,12 +19,16 @@ export function RunsPage() {
   const [cursor, setCursor] = useState<string | null>(null)
   const cursorStack = useRef<(string | null)[]>([null])
 
+  // 'degraded' is engine health, not a run state — the server filter is
+  // skipped for it and rows filter client-side
+  const serverState = state === 'degraded' ? '' : state
   const load = useCallback(
-    (signal: AbortSignal) => apiGet<ListResp<RunSummary>>(`/api/v1/runs${qs({ repo, state, cursor, limit: 50 })}`, signal),
-    [repo, state, cursor],
+    (signal: AbortSignal) => apiGet<ListResp<RunSummary>>(`/api/v1/runs${qs({ repo, state: serverState, cursor, limit: 100 })}`, signal),
+    [repo, serverState, cursor],
   )
   const r = useResource<ListResp<RunSummary>>(`runs:${repo}:${state}:${cursor ?? ''}`, load, { interval: 8000 })
   const data = r.data
+  const items = (data?.items ?? []).filter(x => state !== 'degraded' || x.engineHealth === 'degraded')
 
   const setState = (v: string) => {
     const u = new URLSearchParams(route.query)
@@ -53,10 +58,10 @@ export function RunsPage() {
           <>
             <table className="data rtable">
               <thead>
-                <tr><th>Run</th><th>Repository</th><th>State</th><th>Freshness</th><th>Revision</th><th>Started</th><th className="num">Duration</th><th>Findings</th></tr>
+                <tr><th>Run</th><th>Repository</th><th>State</th><th>Freshness</th><th>Stage</th><th>Engines</th><th>Revision</th><th>Started</th><th className="num">Duration</th><th>Findings</th></tr>
               </thead>
               <tbody>
-                {data.items.map(run => (
+                {items.map(run => (
                   <tr key={`${run.repo}:${run.id}`} className="clickable"
                     onClick={() => navigate(`/repos/${encodeURIComponent(run.repo ?? '')}/runs/${encodeURIComponent(run.id)}`)}
                     onKeyDown={e => { if (e.key === 'Enter') navigate(`/repos/${encodeURIComponent(run.repo ?? '')}/runs/${encodeURIComponent(run.id)}`) }}
@@ -65,9 +70,15 @@ export function RunsPage() {
                     <td data-th="Repository">{run.repo}</td>
                     <td data-th="State"><RunStateBadge state={run.state} /></td>
                     <td data-th="Freshness">{run.freshness === 'fresh' ? <Badge kind="ok" label="fresh" /> : run.freshness === 'stale' ? <Badge kind="stale" label="stale" /> : <span className="muted">—</span>}</td>
+                    <td data-th="Stage">{run.state === 'running' && run.currentStage ? run.currentStage.label : <span className="muted">—</span>}</td>
+                    <td data-th="Engines"><HealthBadge h={run.engineHealth} /></td>
                     <td data-th="Revision"><span className="mono" style={{ fontSize: 12 }}>{shortSha(run.revision)}</span></td>
                     <td data-th="Started" title={fmtFull(run.startedAt)}>{fmtFull(run.startedAt)}</td>
-                    <td data-th="Duration" className="num">{fmtDur(run.startedAt, run.endedAt)}</td>
+                    <td data-th="Duration" className="num">
+                      {fmtDur(run.startedAt, run.endedAt)}
+                      {run.state === 'running' && run.etaSec != null &&
+                        <div className="note">{fmtEta(run.etaSec)} left</div>}
+                    </td>
                     <td data-th="Findings">{run.outcome ? `${run.outcome.verified ?? 0} verified · ${run.outcome.dismissed ?? 0} dismissed` : '—'}</td>
                   </tr>
                 ))}

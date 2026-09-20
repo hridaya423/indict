@@ -98,7 +98,7 @@ export function App() {
                 <input
                   ref={searchRef}
                   type="search"
-                  placeholder="Search findings — id, title, file, engine"
+                  placeholder="Search findings"
                   aria-label="Search findings"
                   value={q}
                   onChange={e => setQ(e.target.value)}
@@ -109,7 +109,7 @@ export function App() {
             {scopeable && (
               <div className="headrow" style={{ justifyContent: 'flex-end' }}>
                 <label className="field-label">
-                  Scope
+                  {route.name === 'overview' ? 'Selected repository' : 'Scope'}
                   <select value={repo} onChange={e => setRepoParam(e.target.value)} aria-label="Repository scope">
                     <option value="">All repositories</option>
                     {(repos.data ?? []).map(r => <option key={r.name} value={r.name}>{r.name}</option>)}

@@ -30,18 +30,19 @@ export function RepoDetailPage({ repo }: { repo: string }) {
             <div className="meta">
               {d.lastScan?.ts ? `Last scan ${ago(d.lastScan.ts)} · ${shortSha(d.lastScan.sha)}` : 'Never scanned'}
               {d.watch?.url ? ` · watch: ${d.watch.url}` : ''}
-              {d.watch?.budget != null ? ` · watch budget $${d.watch.budget}` : ''}
+              {d.watch?.budget != null ? ` · hunt budget ${d.watch.budget} min` : ''}
+              {!d.watch && ' · not registered to watch'}
             </div>
           )}
         </div>
         <div className="panel-body">
           <DataState loading={r.loading} error={r.error} stale={r.stale} onRetry={r.reload}>
             {d && (
-              <div className="kv" style={{ gridTemplateColumns: 'repeat(4, max-content 1fr)' }}>
-                <span className="k">Verified</span><span className="v">{c.verified ?? 0}</span>
-                <span className="k">Awaiting test</span><span className="v">{c.adjudicated ?? 0}</span>
-                <span className="k">Candidates</span><span className="v">{c.candidate ?? 0}</span>
-                <span className="k">Dismissed</span><span className="v">{c.dismissed ?? 0}</span>
+              <div className="kv" style={{ gridTemplateColumns: 'repeat(2, max-content minmax(120px, 1fr))' }}>
+                <span className="k">Verified</span><span className="v"><Link to={`/findings?repo=${encodeURIComponent(repo)}&status=verified`}>{c.verified ?? 0}</Link></span>
+                <span className="k">Awaiting test</span><span className="v"><Link to={`/findings?repo=${encodeURIComponent(repo)}&status=adjudicated`}>{c.adjudicated ?? 0}</Link></span>
+                <span className="k">Candidates</span><span className="v"><Link to={`/findings?repo=${encodeURIComponent(repo)}&status=candidate`}>{c.candidate ?? 0}</Link></span>
+                <span className="k">Dismissed</span><span className="v"><Link to={`/findings?repo=${encodeURIComponent(repo)}&status=dismissed`}>{c.dismissed ?? 0}</Link></span>
                 <span className="k">Fixes</span><span className="v">{d.fixesTotal ? `${d.fixesPassed} / ${d.fixesTotal} gate-passed` : 'none'}</span>
               </div>
             )}

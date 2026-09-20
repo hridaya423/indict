@@ -142,7 +142,10 @@ def _falsify(client: Client, resolver: Resolver, root: Path, f: Finding,
             code=code, strict="STRICT mode: reject unless strong." if strict
                             else "standard scrutiny.")}],
         expect_json=True)
-    return r.parsed or {}
+    p = r.parsed or {}
+    if isinstance(p, list):
+        p = next((x for x in p if isinstance(x, dict)), {})
+    return p if isinstance(p, dict) else {}
 
 
 def _repair_class(client: Client, resolver: Resolver, f: Finding) -> None:
@@ -159,7 +162,8 @@ def _repair_class(client: Client, resolver: Resolver, f: Finding) -> None:
          f"{f.file}:{f.line}.\nCode:\n```\n{code}\n```\n"
          f"Pick the single best vuln_class from: {', '.join(VULN_CLASSES)}.\n"
          'Reply: {"vuln_class": "..."}'}], expect_json=True)
-    cls = str((r.parsed or {}).get("vuln_class", "")).strip().lower()
+    cls = str((r.parsed if isinstance(r.parsed, dict) else {})
+              .get("vuln_class", "")).strip().lower()
     if cls in VULN_CLASSES and cls != f.vuln_class:
         f.detail += f"\n[class repaired {f.vuln_class}->{cls} in adjudication]"
         f.tags.append("class-repaired")

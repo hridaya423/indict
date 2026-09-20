@@ -19,6 +19,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -113,12 +114,29 @@ def _fid(row: dict) -> str:
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
+def _calib_names(root: Path) -> set:
+    """calibrate/targets.yaml names — golden fixtures, hidden from the board."""
+    for cand in (root.parent / "calibrate" / "targets.yaml",
+                 Path(__file__).resolve().parent.parent /
+                 "calibrate" / "targets.yaml"):
+        if cand.exists():
+            try:
+                import yaml
+                return {str(e.get("name")) for e in
+                        (yaml.safe_load(cand.read_text()) or [])
+                        if isinstance(e, dict) and e.get("name")}
+            except Exception:
+                return set()
+    return set()
+
+
 def _repo_dirs(root: Path) -> list[Path]:
     if not root.is_dir():
         return []
+    calib = _calib_names(root)
     out = []
     for d in sorted(root.iterdir(), key=lambda p: p.name):
-        if not d.is_dir() or d.name in ("targets", "packs"):
+        if not d.is_dir() or d.name in ("targets", "packs") or d.name in calib:
             continue
         if any((d / m).exists() for m in REPO_MARKERS):
             out.append(d)
@@ -279,6 +297,19 @@ STAGE_W = {"ingest": .01, "recon": .02, "sweep": .03, "rank": .01,
 LLM_ENGINES = {"hunter", "taintgen", "explorer", "variant", "fuzzlite"}
 
 
+def _hunt_units(rec: dict | None) -> int:
+    """Expected engine lanes for a run — hunter/explorer run once per pass,
+    the rest once. Mirrors the unit list pipeline.run builds."""
+    passes = (rec or {}).get("passes") or 1
+    n = 0
+    for e in (rec or {}).get("engines") or []:
+        if e in ("hunter", "explorer"):
+            n += max(1, passes)
+        elif e in LLM_ENGINES:
+            n += 1
+    return n
+
+
 def _eta(rec: dict | None, intervals: list[dict], pending: list[dict],
          lanes: list[dict], evts: list[dict], state: str,
          started: float | None, now: float) -> int | None:
@@ -290,31 +321,35 @@ def _eta(rec: dict | None, intervals: list[dict], pending: list[dict],
         return None
     if not any(e.get("schemaVersion") for e in evts):
         return None                       # legacy run — no structured stages
-    engines = (rec or {}).get("engines") or []
-    models = (rec or {}).get("models") or []
-    passes = (rec or {}).get("passes") or 1
-    units_exp = (len([e for e in engines if e in LLM_ENGINES])
-                 * max(1, len(models)) * passes)
+    units_exp = _hunt_units(rec)
     prog: dict[str, float] = {}
     for e in evts:                        # latest progress row per stage
         if e.get("kind") == "stage-progress" and e.get("total"):
             prog[e.get("stageId") or e.get("stage")] = \
                 (e.get("completed") or 0) / max(1, e["total"])
-    frac = 0.0
-    for iv in intervals:                  # finished/skipped stages count full
+    # pending = stage-end rows with outcome "skipped" — a skipped stage did
+    # zero work AND took zero time, so it leaves the denominator entirely
+    # (crediting it would say "60% done" 30s into a --reuse-candidates run)
+    skipped = {p["id"] for p in pending}
+    w_sum = sum(w for sid, w in STAGE_W.items() if sid not in skipped)
+    if w_sum <= 0:
+        return None
+    achieved = 0.0
+    for iv in intervals:
         w = STAGE_W.get(iv["id"], 0.0)
+        if not w:
+            continue
         if iv.get("state") == "running":
             if iv["id"] == "hunt":
                 done = len(lanes)
-                frac += w * min(0.95, done / max(units_exp, done + 1))
+                achieved += w * min(0.95, done / max(units_exp, done + 1))
             elif iv["id"] in prog:
-                frac += w * min(0.97, prog[iv["id"]])
+                achieved += w * min(0.97, prog[iv["id"]])
             else:
-                frac += w * 0.4           # underway, no counter to cite
-        else:
-            frac += w
-    frac += sum(STAGE_W.get(p["id"], 0.0) for p in pending)
-    frac = min(0.97, max(frac, 0.03))     # never 0 (infinite) or 1 (zero)
+                achieved += w * 0.4       # underway, no counter to cite
+        elif iv["id"] not in skipped:
+            achieved += w
+    frac = min(0.97, max(achieved / w_sum, 0.03))
     return int((now - started) * (1 - frac) / frac)
 
 
@@ -333,6 +368,11 @@ def _run_state(rid: str, rec: dict | None, evts: list[dict],
             return state, "fresh"
         if live and live.get("run") == rid:
             return state, "stale"
+        # not the live-linked run: the id embeds the launching pid — a dead
+        # pid means killed without a terminal record, never "running"
+        m = re.match(r"^\d{8}-\d{6}-(\d+)$", rid or "")
+        if m and not _pid_alive(int(m.group(1))):
+            return "unknown", "unavailable"
         return state, "unavailable"
     term = [e for e in evts if e.get("kind") == "run-end"
             or (e.get("stage") == "run" and str(e.get("msg", ""))
@@ -388,6 +428,20 @@ def _run_summary(repo_dir: Path, rid: str, rec: dict | None,
         ended = evts[-1]["ts"]
     running_iv = next((i for i in reversed(intervals)
                        if i.get("state") == "running"), None)
+    prog = _progress(evts)
+    if running_iv and running_iv["id"] == "hunt":
+        # during hunt the file-queue counter drains before engines finish
+        # (14/14 files while hunters still churn) — engine lanes are the
+        # real completion signal
+        exp = _hunt_units(rec)
+        if exp:
+            prog = {"completed": min(len(lanes), exp), "total": exp,
+                    "unit": "engines", "stage": "hunt"}
+    elif running_iv and prog and prog.get("stage") \
+            and prog.get("stage") != running_iv["id"]:
+        # finished stage's counter (poc's "9/10") lingering through the
+        # next stage reads as stuck — drop the number, keep nothing stale
+        prog = None
     snap = (repo_dir / "runs" / rid / "findings.jsonl").exists()
     return {"id": rid, "state": state, "freshness": freshness,
             "startedAt": started, "endedAt": ended,
@@ -401,7 +455,7 @@ def _run_summary(repo_dir: Path, rid: str, rec: dict | None,
             "currentStage": ({"id": running_iv["id"],
                               "label": running_iv["label"]}
                              if running_iv else None),
-            "progress": _progress(evts),
+            "progress": prog,
             "etaSec": _eta(rec, intervals, pending, lanes, evts, state,
                            started, time.time()),
             "stages": intervals, "pendingStages": pending, "lanes": lanes,
@@ -433,12 +487,51 @@ def _verification(repo_dir: Path, fid: str) -> list[dict]:
     return rows
 
 
-def _ver_display(repo_dir: Path, row: dict) -> str:
+SUCCESS_OUTCOMES = ("matched", "verified")
+
+
+def _scoped_verification(repo_dir: Path, fid: str, rid: str | None,
+                         runs: dict, latest: str | None) -> tuple[list, str]:
+    """(records, scope) — proof resolved to the exact run, never borrowed.
+    Frozen run evidence wins; explicit-run records match by run id; records
+    with no run field belong to the run whose time window contains them;
+    anything left is the latest run's (mutable) poc dir only."""
+    if rid:
+        frozen = repo_dir / "runs" / rid / "evidence" / fid / "poc" \
+            / "verification.jsonl"
+        if frozen.exists():
+            rows, _ = _cached(frozen, _jsonl)
+            return rows, "frozen"
+    rows = _verification(repo_dir, fid)
+    if not rid or rid == latest:
+        return rows, "current"
+    rec = (runs.get(rid) or {}).get("record") or {}
+    w0, w1 = rec.get("startedAt"), rec.get("endedAt")
+    scoped = []
+    for r in rows:
+        rr = r.get("run")
+        if rr is not None:
+            if rr == rid:
+                scoped.append(r)
+            continue
+        t = r.get("endedAt") or r.get("startedAt")
+        if t is not None and w0 is not None and w1 is not None \
+                and w0 <= t <= w1:
+            scoped.append(r)
+    return scoped, "run-window"
+
+
+def _ver_display(repo_dir: Path, row: dict, rid: str | None = None,
+                 runs: dict | None = None, latest: str | None = None) -> str:
     st = row.get("status")
     if st != "verified":
         return {"adjudicated": "awaiting", "candidate": "candidate",
                 "dismissed": "dismissed"}.get(st, st or "unknown")
-    return "reproduced" if _verification(repo_dir, _fid(row)) \
+    recs, _ = _scoped_verification(
+        repo_dir, _fid(row), rid, runs or _run_ids(repo_dir),
+        latest if latest is not None else _latest_run(repo_dir))
+    return "reproduced" \
+        if any(r.get("outcome") in SUCCESS_OUTCOMES for r in recs) \
         else "recorded-verified"
 
 
@@ -464,7 +557,8 @@ def _fix_map(repo_dir: Path) -> dict[str, dict]:
 
 
 def _frow(repo_dir: Path, repo: str, row: dict, fixes: dict,
-          latest_run: str | None, source: str) -> dict:
+          latest_run: str | None, source: str,
+          runs: dict | None = None, latest: str | None = None) -> dict:
     fid = _fid(row)
     fix = fixes.get(fid)
     return {"id": fid, "repo": repo,
@@ -472,7 +566,8 @@ def _frow(repo_dir: Path, repo: str, row: dict, fixes: dict,
             "file": row.get("file") or "", "line": row.get("line") or 0,
             "severity": row.get("severity") or "medium",
             "status": row.get("status") or "candidate",
-            "verification": _ver_display(repo_dir, row),
+            "verification": _ver_display(repo_dir, row, latest_run,
+                                         runs, latest),
             "vulnClass": row.get("vuln_class") or "",
             "engine": row.get("engine") or "",
             "model": row.get("model") or "",
@@ -551,6 +646,7 @@ def _run_detail(repo_dir: Path, rid: str) -> dict | None:
     s["repo"] = repo_dir.name
     s["eventsTail"] = runs[rid]["events"][-3:]
     s["eventsTotal"] = len(runs[rid]["events"])
+    s["eventsTailCursor"] = f"e:{max(0, len(runs[rid]['events']) - 3)}"
     fl = _run_findings(repo_dir, rid)
     s["findingsTotal"] = fl["total"]
     s["findingsSource"] = fl["source"]
@@ -649,17 +745,50 @@ def overview(root: Path, repo: str | None = None, run: str | None = None,
             "counts": counts, "repos": repos, "selected": selected}
 
 
-def run_events(repo_dir: Path, rid: str, cursor: str | None,
-               limit: int) -> dict | None:
+def _eoff(cur: str | None) -> int | None:
+    if cur and cur.startswith("e:") and cur[2:].isdigit():
+        return int(cur[2:])
+    return None
+
+
+def run_events(repo_dir: Path, rid: str, cursor: str | None, limit: int,
+               before: str | None = None,
+               after: str | None = None) -> dict | None:
+    """Server-owned opaque cursors over the append-only event ledger.
+    ?cursor=e:N pages forward from N; ?before=e:N returns up to `limit`
+    events immediately preceding N (chronological order); ?after=e:N
+    returns everything after N (live tail). Clients never construct
+    cursors — they echo back nextCursor/prevCursor."""
     runs = _run_ids(repo_dir)
     if rid not in runs:
         return None
     evs = runs[rid]["events"]
-    off = int(cursor[2:]) if cursor and cursor.startswith("e:") else 0
+    n = len(evs)
+    if before is not None:
+        b = _eoff(before)
+        b = n if b is None else max(0, min(b, n))
+        lo = max(0, b - limit)
+        page = evs[lo:b]
+        return {"items": page, "total": n,
+                "nextCursor": f"e:{b}" if b < n else None,
+                "prevCursor": f"e:{lo}" if lo > 0 else None,
+                "legacy": not any(e.get("schemaVersion") for e in page),
+                "generatedAt": time.time()}
+    if after is not None:
+        a = _eoff(after)
+        a = 0 if a is None else max(0, min(a, n))
+        page = evs[a:]
+        return {"items": page, "total": n,
+                "nextCursor": f"e:{n}" if a < n else None,
+                "prevCursor": f"e:{a}" if a > 0 else None,
+                "legacy": not any(e.get("schemaVersion") for e in page),
+                "generatedAt": time.time()}
+    off = _eoff(cursor) or 0
     page = evs[off:off + limit]
     nxt = off + limit
-    return {"items": page, "total": len(evs),
-            "nextCursor": f"e:{nxt}" if nxt < len(evs) else None,
+    return {"items": page, "total": n,
+            "nextCursor": f"e:{nxt}" if nxt < n else None,
+            "prevCursor": f"e:{off}" if off > 0 else None,
             "legacy": not any(e.get("schemaVersion") for e in page),
             "generatedAt": time.time()}
 
@@ -743,8 +872,10 @@ def findings_list(root: Path, repo: str | None, run: str | None,
     if sort == "recent":
         rows.sort(key=lambda r: r["id"], reverse=True)
     else:
-        rows.sort(key=lambda r: (SEV_ORDER.get(r["severity"], 5),
-                                 STATUS_ORDER.get(r["status"], 4),
+        # default: verified (reproduced/recorded) first — proven results lead,
+        # then severity ranks within each trust level
+        rows.sort(key=lambda r: (STATUS_ORDER.get(r["status"], 4),
+                                 SEV_ORDER.get(r["severity"], 5),
                                  r["id"]))
     total = len(rows)
     start = max(0, (page - 1) * limit)
@@ -787,24 +918,62 @@ TEXT_TYPES = {".txt", ".json", ".jsonl", ".md", ".diff", ".patch",
               ".log", ".sarif", ".csv", ".yml", ".yaml", ".toml"}
 
 
-def _artifact_entry(repo: str, rel: str, path: Path) -> dict:
+def _artifact_role(rel: str, name: str) -> str:
+    """Producer-side role mapping — the UI picks by role, never filename."""
+    if rel.startswith("packs/"):
+        return "pack"
+    n = name.lower()
+    if n == "verification.jsonl":
+        return "verification"
+    if n.startswith("source."):
+        return "source"
+    if n.endswith((".diff", ".patch")):
+        return "patch"
+    if re.match(r"^stderr\d*\.txt$", n):
+        return "stderr"
+    if re.match(r"^(output\d*|service_probe_output|probe_output)\.txt$", n):
+        return "stdout"
+    if n.endswith(".sh") or n in ("poc.py", "poc.js"):
+        return "script"
+    return "other"
+
+
+def _artifact_attempt(name: str) -> int | None:
+    m = re.match(r"^(?:output|repro|stderr)(\d+)\.", name)
+    if m:
+        return int(m.group(1)) + 1
+    if re.match(r"^(?:output|repro|stderr)\.", name):
+        return 1
+    return None
+
+
+def _artifact_entry(repo: str, rel: str, path: Path,
+                    run: str | None = None,
+                    trunc: dict | None = None) -> dict:
     try:
         size = path.stat().st_size
     except OSError:
         size = None
-    return {"id": _artifact_id(repo, rel), "name": path.name, "path": rel,
+    name = path.name
+    return {"id": _artifact_id(repo, rel), "name": name, "path": rel,
             "size": size, "type": path.suffix.lstrip(".") or "file",
-            "previewable": path.suffix.lower() in TEXT_TYPES}
+            "previewable": path.suffix.lower() in TEXT_TYPES,
+            "role": _artifact_role(rel, name), "run": run,
+            "attempt": _artifact_attempt(name),
+            "producerTruncated": bool((trunc or {}).get(name))}
 
 
-def _dir_artifacts(repo: str, base: Path, repo_dir: Path) -> list[dict]:
+def _dir_artifacts(repo: str, base: Path, repo_dir: Path,
+                   run: str | None = None, trunc: dict | None = None
+                   ) -> list[dict]:
     out = []
     if not base.is_dir():
         return out
     for p in sorted(base.rglob("*")):
         if p.is_file():
             out.append(_artifact_entry(
-                repo, p.relative_to(repo_dir).as_posix(), p))
+                repo, p.relative_to(repo_dir).as_posix(), p,
+                run=run, trunc=trunc))
     return out
 
 
@@ -834,9 +1003,11 @@ def _checkout_for(root: Path, repo_dir: Path,
 
 
 def _source_excerpt(root: Path, repo_dir: Path, f: dict, rid: str | None,
-                    rec: dict | None) -> dict:
+                    rec: dict | None,
+                    allow_lastscan: bool = True) -> dict:
     """Frozen run evidence first (authoritative recorded revision), then a
-    configured checkout at the recorded sha. Never substitutes HEAD."""
+    configured checkout at the recorded sha. Never substitutes HEAD. A
+    historical run request never borrows the last-scan revision."""
     fid = _fid(f)
     if rid:
         frozen = repo_dir / "runs" / rid / "evidence" / fid
@@ -852,7 +1023,7 @@ def _source_excerpt(root: Path, repo_dir: Path, f: dict, rid: str | None,
                         errors="replace").splitlines()}
     revision = (rec or {}).get("revision")
     rev_src = "run-record"
-    if not revision:
+    if not revision and allow_lastscan:
         revision = state_read(repo_dir).get("last_sha")
         rev_src = "last-scan"
     if not revision:
@@ -883,7 +1054,10 @@ def _source_excerpt(root: Path, repo_dir: Path, f: dict, rid: str | None,
 
 def finding_case(root: Path, repo: str, fid: str,
                  run: str | None = None) -> dict:
-    out = {"finding": None, "warnings": []}
+    """One finding case at an exact scope. An explicit run is validated;
+    proof/source/artifacts resolve to that run's frozen or window-scoped
+    records — current mutable evidence is never presented as historical."""
+    out = {"finding": None, "warnings": [], "latestRun": None}
     try:
         repo_dir = (root / repo).resolve()
         if repo_dir != root.resolve() \
@@ -894,7 +1068,12 @@ def finding_case(root: Path, repo: str, fid: str,
     if not repo_dir.is_dir():
         return out
     runs = _run_ids(repo_dir)
-    rid = run if (run and run in runs) else _latest_run(repo_dir)
+    latest = _latest_run(repo_dir)
+    out["latestRun"] = latest
+    if run and run not in runs:
+        out["runError"] = "unknown-run"
+        return out
+    rid = run or latest
     rec = (runs.get(rid) or {}).get("record") if rid else None
     rows, _ = _findings_rows(repo_dir)
     f = None
@@ -906,26 +1085,31 @@ def finding_case(root: Path, repo: str, fid: str,
             snap_rows, _ = _cached(snap, _jsonl)
             f = next((x for x in snap_rows if _fid(x) == fid), None)
             if f is None:
+                if run:
+                    out["runError"] = "not-in-run"
+                    return out
                 f = next((x for x in rows if _fid(x) == fid), None)
                 if f is not None:
                     out["warnings"].append(
-                        "finding absent from this run's snapshot; showing "
-                        "the latest record")
+                        "finding absent from the latest run's snapshot; "
+                        "showing the current record")
         else:
             f = next((x for x in rows if _fid(x) == fid), None)
-            if f is not None and rid != _latest_run(repo_dir):
+            if f is not None and rid != latest:
                 out["warnings"].append(
-                    "no snapshot for this run — showing the latest finding "
+                    "no snapshot for this run — showing the current finding "
                     "record; run-scoped fields may differ")
     else:
         f = next((x for x in rows if _fid(x) == fid), None)
     if f is None:
         return out
     fid = _fid(f)
+    is_latest = rid is None or rid == latest
     fixes = _fix_map(repo_dir)
     out["finding"] = {
         **_frow(repo_dir, repo, f, fixes, rid,
-                "snapshot" if snap_used else "latest"),
+                "snapshot" if snap_used else "latest",
+                runs=runs, latest=latest),
         "poc": f.get("poc") or ""}
     out["writeup"] = writeup_load(repo_dir).get(fid, "")
     if rid and rid in runs:
@@ -935,29 +1119,65 @@ def finding_case(root: Path, repo: str, fid: str,
                       "revision": (rec or {}).get("revision")}
     else:
         out["run"] = None
-    vrecs = _verification(repo_dir, fid)
-    rerun = _json(repo_dir / "poc" / fid / "rerun.json")
+    vrecs, vscope = _scoped_verification(repo_dir, fid, rid, runs, latest)
+    if vscope == "run-window":
+        out["warnings"].append(
+            "verification predates run-scoped capture; records matched to "
+            "this run's time window")
+    success = [r for r in vrecs if r.get("outcome") in SUCCESS_OUTCOMES]
+    basis = success[-1] if success else None
+    later = [r for r in vrecs
+             if basis is not None and r is not basis
+             and (r.get("endedAt") or 0) > (basis.get("endedAt") or 0)
+             and r.get("outcome") not in SUCCESS_OUTCOMES]
+    rerun = None
+    if is_latest or (rid and (repo_dir / "runs" / rid / "evidence" / fid
+                              / "poc" / "rerun.json").exists()):
+        rerun = _json(repo_dir / "poc" / fid / "rerun.json")
+        if rerun and rid and not is_latest:
+            frozen_rc = _json(repo_dir / "runs" / rid / "evidence" / fid
+                              / "poc" / "rerun.json")
+            rerun = frozen_rc or rerun
     out["proof"] = {"claim": f.get("title"), "verdict": f.get("verdict") or "",
-                    "basis": vrecs[-1] if vrecs else None,
+                    "basis": basis,
                     "attempts": vrecs,
+                    "laterFailures": later,
                     "reproduced": f.get("status") == "verified"
-                    and bool(vrecs),
+                    and basis is not None,
                     "recordedVerified": f.get("status") == "verified"
-                    and not vrecs,
+                    and basis is None,
                     "rerunContract": rerun}
     evs = [e for e in _events(repo_dir)[0] if e.get("finding") == fid]
     scoped = [e for e in evs if e.get("run") == rid] if rid else []
-    out["events"] = scoped or evs
-    out["eventsScope"] = "run" if scoped else "all-runs"
+    if run and not scoped:
+        out["events"] = []
+        out["eventsAll"] = evs
+        out["eventsScope"] = "run-empty"
+    else:
+        out["events"] = scoped or evs
+        out["eventsScope"] = "run" if scoped else "all-runs"
+    trunc = {r.get("outputFile"): bool(r.get("producerTruncated"))
+             for r in vrecs if r.get("outputFile")}
+    frozen_dir = repo_dir / "runs" / rid / "evidence" / fid / "poc" \
+        if rid else None
     art = []
-    if rid and (repo_dir / "runs" / rid / "evidence" / fid / "poc").is_dir():
-        art += _dir_artifacts(
-            repo, repo_dir / "runs" / rid / "evidence" / fid / "poc",
-            repo_dir)
-    art += _dir_artifacts(repo, repo_dir / "poc" / fid, repo_dir)
+    if frozen_dir is not None and frozen_dir.is_dir():
+        art += _dir_artifacts(repo, frozen_dir, repo_dir, run=rid,
+                              trunc=trunc)
+    if is_latest:
+        art += _dir_artifacts(repo, repo_dir / "poc" / fid, repo_dir,
+                              trunc=trunc)
+    elif not art:
+        out["warnings"].append(
+            "this run froze no evidence artifacts; current artifacts are "
+            "deliberately withheld from historical scope")
+    out["artifactsScope"] = ("run" if frozen_dir is not None
+                             and frozen_dir.is_dir() and not is_latest
+                             else "mixed" if frozen_dir is not None
+                             and frozen_dir.is_dir() else "current")
     pack = repo_dir / "packs" / f"{fid}.tar.gz"
     out["pack"] = (_artifact_entry(repo, f"packs/{fid}.tar.gz", pack)
-                   if pack.exists() else None)
+                   if pack.exists() and is_latest else None)
     out["artifacts"] = art
     fx = fixes.get(fid)
     if fx:
@@ -969,6 +1189,8 @@ def finding_case(root: Path, repo: str, fid: str,
                     and "/issues/" in str(r.get("url", "")):
                 issue = r.get("url")
         fx["issue"] = issue
+    if fx:
+        fx["scope"] = "current"
     out["fix"] = fx
     related = []
     if fid.startswith("chain-"):
@@ -984,7 +1206,9 @@ def finding_case(root: Path, repo: str, fid: str,
             related.append({"id": oid, "title": o.get("title"),
                             "kind": "mentioned-in-narrative"})
     out["related"] = related
-    out["source"] = _source_excerpt(root, repo_dir, f, rid, rec)
+    out["source"] = _source_excerpt(root, repo_dir, f, rid, rec,
+                                    allow_lastscan=is_latest
+                                    or rid is None)
     out["snapshot"] = snap_used
     return out
 

@@ -1,16 +1,25 @@
 import { Link } from './router'
 import type { RepoSummary, RunDetail, RunSummary } from './types'
-import { fmtDurSecs, shortRun, shortSha } from './format'
+import { fmtDurSecs, fmtEta, shortRun, shortSha } from './format'
 import { Badge, EventList, HeartbeatCell, RunStateBadge, Switch, Timeline, WorkCell } from './components'
 
-export function RepoScansTable({ repos, selected }: {
+export function RepoScansTable({ repos, selected, maxRows, onSelect }: {
   repos: RepoSummary[]; selected?: string | null
+  maxRows?: number; onSelect?: (name: string) => void
 }) {
+  const withRuns = repos.filter(r => r.latestRun)
+  let shown = maxRows != null ? withRuns.slice(0, maxRows) : withRuns
+  if (maxRows != null && selected != null) {
+    const i = withRuns.findIndex(r => r.name === selected)
+    if (i >= maxRows) shown = [withRuns[i], ...withRuns.slice(0, maxRows - 1)]
+  }
+  const hidden = withRuns.length - shown.length
   return (
     <table className="data rtable">
       <caption className="sr">Latest recorded run per repository. Repositories without runs are omitted.</caption>
       <thead>
         <tr>
+          {onSelect && <th scope="col" style={{ width: 36 }}><span className="sr">Select</span></th>}
           <th scope="col">Repository</th>
           <th scope="col">Scanned revision</th>
           <th scope="col">Current stage</th>
@@ -19,13 +28,23 @@ export function RepoScansTable({ repos, selected }: {
         </tr>
       </thead>
       <tbody>
-        {repos.filter(r => r.latestRun).map(r => {
+        {shown.map(r => {
           const run = r.latestRun as RunSummary
           const sel = selected === r.name || selected === run.id
           return (
-            <tr key={r.name} className={sel ? 'sel' : ''}>
+            <tr key={r.name} className={sel ? 'sel' : ''}
+              onClick={onSelect && !sel ? () => onSelect(r.name) : undefined}
+              style={onSelect && !sel ? { cursor: 'pointer' } : undefined}>
+              {onSelect && (
+                <td>
+                  <button className="selbtn" aria-pressed={sel}
+                    title={`Show ${r.name} workspace`} aria-label={`Select ${r.name}`}
+                    onClick={e => { e.stopPropagation(); onSelect(r.name) }} />
+                </td>
+              )}
               <td>
-                <Link className="rowtitle" to={`/repos/${encodeURIComponent(r.name)}`}>{r.name}</Link>
+                <Link className="rowtitle" to={`/repos/${encodeURIComponent(r.name)}`}
+                  title={`Open ${r.name} detail`}>{r.name}</Link>
                 {r.warnings.length > 0 && <div className="rowsub">{r.warnings[0]}</div>}
               </td>
               <td><span className="mono" style={{ fontSize: 12 }} title={run.revision ?? ''}>{shortSha(run.revision)}</span></td>
@@ -38,7 +57,7 @@ export function RepoScansTable({ repos, selected }: {
                       ? <RunStateBadge state="failed" />
                       : <span className="muted">—</span>}
               </td>
-              <td><WorkCell progress={run.progress} state={run.state} etaSec={run.etaSec} /></td>
+              <td><WorkCell progress={run.progress} state={run.state} etaSec={run.etaSec} currentStageId={run.currentStage?.id} /></td>
               <td style={{ textAlign: 'right' }}>
                 {run.state === 'completed'
                   ? <span className="muted">Finished</span>
@@ -50,6 +69,15 @@ export function RepoScansTable({ repos, selected }: {
           )
         })}
       </tbody>
+      {hidden > 0 && (
+        <tfoot>
+          <tr>
+            <td colSpan={onSelect ? 6 : 5} style={{ padding: '8px 12px' }}>
+              <Link className="linkbtn" to="/repos">View all {repos.length} repositories</Link>
+            </td>
+          </tr>
+        </tfoot>
+      )}
     </table>
   )
 }
@@ -84,15 +112,20 @@ export function SelectedRunPanel({ repo, run, follow, onFollow, now, events }: {
         </h2>
         <span className="meta">
           Revision {shortSha(run.revision)} · Elapsed {elapsed}
+          {run.state === 'running' && run.etaSec != null &&
+            <> · <span title="estimated time remaining">{fmtEta(run.etaSec)} left</span></>}
           {run.state !== 'running' && <> · <RunStateBadge state={run.state} /></>}
         </span>
         <span className="end">
           <Link className="linkbtn" to={`/repos/${encodeURIComponent(repo)}/runs/${encodeURIComponent(run.id)}`}>View full run</Link>
-          <Switch checked={follow} onChange={onFollow} label="Follow live" />
+          {run.state === 'running' && (
+            <Switch checked={follow} onChange={onFollow} label="Follow live" />
+          )}
         </span>
       </div>
       <div className="panel-body">
-        <Timeline stages={run.stages} pending={run.pendingStages} lanes={run.lanes} now={now} />
+        <Timeline stages={run.stages} pending={run.pendingStages} lanes={run.lanes} now={now} compact
+          stale={run.freshness === 'stale'} />
         {run.findingsSource === 'latest' && (
           <div className="note" style={{ marginTop: 8 }}>Legacy run — stage timing reconstructed from events.</div>
         )}

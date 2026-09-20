@@ -73,8 +73,10 @@ def card(x, y, w, h, icon, color, title, body, fill="#ffffff", border="rgba(31,4
     chip(x + 10, y + (h - 36) / 2, color, icon)
     svg.append(f'<text x="{x + 56}" y="{y + (24 if h >= 56 else 20)}" fill="{INK}" font-size="13" font-weight="700" font-family="Nunito,sans-serif">{esc(title)}</text>')
     lines = body.split("\n")
+    top = 40 if h >= 56 else 40 - len(lines) * 5
+    step = 12 if h >= 64 else 11
     for i, ln in enumerate(lines):
-        svg.append(f'<text x="{x + 56}" y="{y + 40 + i * 12}" fill="{MUT}" font-size="10.5" font-family="Inter,sans-serif">{esc(ln)}</text>')
+        svg.append(f'<text x="{x + 56}" y="{y + top + i * step}" fill="{MUT}" font-size="10.5" font-family="Inter,sans-serif">{esc(ln)}</text>')
 
 
 def minicard(x, y, w, h, icon, color, title, body):

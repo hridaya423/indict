@@ -1,4 +1,4 @@
-import { createContext, useEffect, useSyncExternalStore, type CSSProperties, type ReactNode, type MouseEvent } from 'react'
+import { createContext, useEffect, useSyncExternalStore, type ReactNode, type MouseEvent } from 'react'
 
 export interface Route {
   name: string
@@ -66,13 +66,17 @@ export function setRepoParam(repo: string) {
   navigate(`${current.path}${q.toString() ? '?' + q.toString() : ''}`, true)
 }
 
-export function Link({ to, className, children, title, style, onClick }: {
-  to: string; className?: string; children: ReactNode; title?: string
-  style?: CSSProperties
+export function back(fallback: string) {
+  if (history.length > 1) history.back()
+  else navigate(fallback)
+}
+
+export function Link({ to, className, children, onClick, ...rest }: {
+  to: string; className?: string; children?: ReactNode
   onClick?: (e: MouseEvent) => void
-}) {
+} & Record<string, unknown>) {
   return (
-    <a href={to} className={className} title={title} style={style} onClick={(e) => {
+    <a {...rest} href={to} className={className} onClick={(e) => {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
       e.preventDefault()
       onClick?.(e)

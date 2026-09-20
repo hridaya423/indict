@@ -198,6 +198,71 @@ def corrupt(root: Path) -> None:
         '{"ts":1,"run":"x","msg":"ok"}\n{"ts":2,"run":"x","ms')
 
 
+def delta(root: Path) -> None:
+    """Two runs, one shared finding — a later FAILED attempt from run B
+    must not rewrite run A's successful observation or its artifacts."""
+    d = root / "delta"
+    rid_a, rid_b = "20260105-000000-66666", "20260106-000000-77777"
+    f = _finding(9, "verified")
+    f["verdict"] = "reproduced in sandbox"
+    _j(d / "findings.jsonl", [f])
+    _j(d / "events.jsonl",
+       _events(rid_a, T0 + 90000, 6) + _events(rid_b, T0 + 99000, 6))
+    _w(d / "runs" / rid_a / "run.json",
+       json.dumps(_run_record(rid_a, "completed", T0 + 90000)))
+    _j(d / "runs" / rid_a / "findings.jsonl", [f])
+    # run B rescanned and the bug did not reproduce / re-appear there
+    _w(d / "runs" / rid_b / "run.json",
+       json.dumps(_run_record(rid_b, "completed", T0 + 99000)))
+    _j(d / "runs" / rid_b / "findings.jsonl", [_finding(10)])
+    poc = d / "poc" / f["id"]
+    _w(poc / "output.txt", "scope-marker-a\n")
+    _w(poc / "repro.sh", "#!/bin/bash\necho scope-marker-a\n")
+    _j(poc / "verification.jsonl", [
+        {"schemaVersion": 1, "kind": "verification-result", "attempt": 1,
+         "mode": "sandbox", "script": "repro.sh", "signal": "scope-marker-a",
+         "startedAt": T0 + 90200, "endedAt": T0 + 90210, "returnCode": 0,
+         "basis": "signal", "outcome": "matched", "run": rid_a,
+         "outputFile": "output.txt", "producerTruncated": False},
+        {"schemaVersion": 1, "kind": "verification-result", "attempt": 2,
+         "mode": "sandbox", "script": "repro.sh", "signal": "scope-marker-a",
+         "startedAt": T0 + 99200, "endedAt": T0 + 99210, "returnCode": 1,
+         "basis": None, "outcome": "no-signal", "run": rid_b,
+         "outputFile": "output.txt", "producerTruncated": False},
+    ])
+    _w(d / "state.json", json.dumps(
+        {"last_sha": "a1b2c3d4e5f6", "last_scan": T0 + 99370}))
+
+
+def theta(root: Path) -> None:
+    """Running run parked in Verify — the finished Hunt stage's counter
+    must not read as Verify's progress."""
+    d = root / "theta"
+    rid = "20260107-000000-88888"
+    rec = _run_record(rid, "running", time.time() - 120)
+    rec.pop("endedAt")
+    _w(d / "runs" / rid / "run.json", json.dumps(rec))
+    now = time.time()
+    _j(d / "events.jsonl", [
+        {"ts": now - 120, "run": rid, "schemaVersion": 1,
+         "kind": "run-start", "msg": "run started"},
+        {"ts": now - 100, "run": rid, "schemaVersion": 1,
+         "kind": "stage-start", "stage": "hunt", "stageId": "hunt"},
+        {"ts": now - 80, "run": rid, "schemaVersion": 1,
+         "kind": "stage-progress", "stage": "hunt", "stageId": "hunt",
+         "completed": 3, "total": 3, "unit": "batches"},
+        {"ts": now - 60, "run": rid, "schemaVersion": 1,
+         "kind": "stage-end", "stage": "hunt", "stageId": "hunt",
+         "outcome": "completed"},
+        {"ts": now - 30, "run": rid, "schemaVersion": 1,
+         "kind": "stage-start", "stage": "poc", "stageId": "poc"},
+    ])
+    _j(d / "findings.jsonl", [])
+    _w(d / "live.json", json.dumps(
+        {"ts": now, "run": rid, "done": False, "daemon": False,
+         "live": True}))
+
+
 def big(root: Path) -> None:
     rnd = random.Random(7)
     for ri in range(50):
@@ -222,6 +287,8 @@ def main() -> None:
     gamma(out)
     legacy(out)
     corrupt(out)
+    delta(out)
+    theta(out)
     if "--big" in sys.argv:
         big(out)
     print(f"fixture: {out}")

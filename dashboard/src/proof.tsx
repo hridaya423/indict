@@ -2,19 +2,31 @@ import { useEffect, useState } from 'react'
 import { Copy, ArrowRight } from '@phosphor-icons/react'
 import type { FindingCase, VerificationRecord } from './types'
 import { fmtDurSecs, shortRun, shortSha, BASIS_LABEL, FIX_LABEL } from './format'
-import { ArtifactList, Badge, CheckBadge, EventList, EvidenceCheck, SeverityBadge, Tabs, VerBadge } from './components'
+import { ArtifactList, ArtifactPreviewPane, Badge, CheckBadge, EventList, EvidenceCheck, SeverityBadge, Tabs, VerBadge } from './components'
 import { Link } from './router'
 
 const TABS = [
   { id: 'proof', label: 'Proof' },
   { id: 'source', label: 'Source' },
-  { id: 'repro', label: 'Reproduction' },
+  { id: 'reproduction', label: 'Reproduction' },
   { id: 'fix', label: 'Fix' },
   { id: 'history', label: 'History' },
 ]
 
-export function ProofPanel({ c, compact }: { c: FindingCase; compact?: boolean }) {
-  const [tab, setTab] = useState('proof')
+export function normalizeTab(t: string | null | undefined): string {
+  if (!t) return 'proof'
+  const n = t === 'repro' ? 'reproduction' : t
+  return TABS.some(x => x.id === n) ? n : 'proof'
+}
+
+export function ProofPanel({ c, compact, tab, onTab }: {
+  c: FindingCase; compact?: boolean
+  tab?: string; onTab?: (t: string) => void
+}) {
+  const [intTab, setIntTab] = useState('proof')
+  const active = tab != null ? normalizeTab(tab) : intTab
+  const change = (t: string) => { setIntTab(t); onTab?.(t) }
+  const [preview, setPreview] = useState<import('./types').ArtifactEntry | null>(null)
   const f = c.finding
   if (!f) return <div className="dstate"><div className="t">Finding record unavailable.</div></div>
   const proof = c.proof
@@ -40,18 +52,19 @@ export function ProofPanel({ c, compact }: { c: FindingCase; compact?: boolean }
         </div>
       )}
       <div style={{ marginTop: 12 }}>
-        <Tabs tabs={TABS} active={tab} onChange={setTab} ariaLabel={`Evidence for finding ${f.id}`} />
+        <Tabs tabs={TABS} active={active} onChange={change} ariaLabel={`Evidence for finding ${f.id}`} />
       </div>
-      <div style={{ paddingTop: 16 }}>
-        {tab === 'proof' && <ProofTab c={c} />}
-        {tab === 'source' && <SourceTab c={c} />}
-        {tab === 'repro' && <ReproTab c={c} />}
-        {tab === 'fix' && <FixTab c={c} />}
-        {tab === 'history' && <HistoryTab c={c} />}
+      <div style={{ paddingTop: 16 }} role="tabpanel" aria-label={`${TABS.find(t => t.id === active)?.label} tab`}>
+        {active === 'proof' && <ProofTab c={c} onPreview={setPreview} />}
+        {active === 'source' && <SourceTab c={c} />}
+        {active === 'reproduction' && <ReproTab c={c} />}
+        {active === 'fix' && <FixTab c={c} />}
+        {active === 'history' && <HistoryTab c={c} />}
       </div>
+      {preview && <ArtifactPreviewPane artifact={preview} onClose={() => setPreview(null)} />}
       {compact && (
         <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-          <Link className="btn primary" to={`/repos/${encodeURIComponent(f.repo)}/findings/${encodeURIComponent(f.id)}`}>
+          <Link className="btn primary" to={`/repos/${encodeURIComponent(f.repo)}/findings/${encodeURIComponent(f.id)}${c.run?.id ? `?run=${encodeURIComponent(c.run.id)}&tab=${active}` : `?tab=${active}`}`}>
             Open full case<ArrowRight size={15} />
           </Link>
           {c.pack
@@ -59,12 +72,11 @@ export function ProofPanel({ c, compact }: { c: FindingCase; compact?: boolean }
             : <span className="btn secondary" aria-disabled="true" title="No evidence pack recorded" style={{ opacity: 0.55 }}>Evidence pack</span>}
         </div>
       )}
-      {basis === null && ver === 'reproduced' && null}
       {proof && !proof.basis && (proof.reproduced || proof.recordedVerified) && (
-        <div className="note" style={{ marginTop: 12 }}>Detailed execution data unavailable — recorded before structured verification records.</div>
+        <div className="note" style={{ marginTop: 12 }}>Detailed execution data unavailable for this scope — recorded before structured verification records, or not captured for this run.</div>
       )}
       {!basis && !proof?.recordedVerified && !proof?.reproduced && f.status !== 'dismissed' && (
-        <div className="note" style={{ marginTop: 12 }}>No recorded execution output for this finding yet.</div>
+        <div className="note" style={{ marginTop: 12 }}>No recorded execution output for this finding in this scope.</div>
       )}
     </div>
   )
@@ -80,10 +92,17 @@ function MetaLine({ c }: { c: FindingCase }) {
   return <div className="note">{parts.join(' · ')}</div>
 }
 
-function ProofTab({ c }: { c: FindingCase }) {
+function ProofTab({ c, onPreview }: {
+  c: FindingCase; onPreview?: (a: import('./types').ArtifactEntry) => void
+}) {
   const proof = c.proof
   const basis = proof?.basis
-  const outArt = c.artifacts?.find(a => a.name === 'poc-output.txt')
+  // pick recorded output by artifact role + attempt identity, never by
+  // guessing filenames — falls back to any stdout artifact
+  const outs = (c.artifacts ?? []).filter(a => a.role === 'stdout')
+  const outArt = outs.find(a => a.attempt != null && a.attempt === basis?.attempt)
+    ?? outs.find(a => a.attempt == null) ?? outs[0]
+  const later = proof?.laterFailures ?? []
   return (
     <div>
       {proof?.claim && <p className="claim">{proof.claim}</p>}
@@ -92,28 +111,41 @@ function ProofTab({ c }: { c: FindingCase }) {
         <div className="kv" style={{ marginTop: 8 }}>
           {basis.script && <><span className="k">Command</span><span className="v mono">{basis.script}</span></>}
           {basis.returnCode != null && <><span className="k">Exit code</span><span className="v">{basis.returnCode}</span></>}
+          {basis.mode && <><span className="k">Execution mode</span><span className="v">{basis.mode}</span></>}
         </div>
       )}
-      {outArt && <OutputBlock artifactId={outArt.id} />}
+      {outArt && <OutputBlock artifactId={outArt.id} truncated={outArt.producerTruncated} />}
+      {basis && !outArt && <div className="note" style={{ marginTop: 8 }}>Recorded output not available for this attempt.</div>}
+      {later.length > 0 && (
+        <div className="note" style={{ marginTop: 8 }}>
+          Later attempt{later.length === 1 ? '' : 's'} did not reproduce ({later.map(a => a.outcome ?? 'failed').join(', ')}) — the successful observation above stands as recorded.
+        </div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12 }}>
         {basis?.signal
-          ? <EvidenceCheck ok={basis.outcome === 'verified'} text={`${BASIS_LABEL[basis.signal ?? ''] ?? 'Signal'} — ${basis.signal}`} />
-          : <EvidenceCheck ok={null} text="No recorded signal check" />}
+          ? <EvidenceCheck ok={true} text={`${BASIS_LABEL[basis.basis ?? ''] ?? 'Recorded check'} — ${basis.signal}`} />
+          : basis?.basis
+            ? <EvidenceCheck ok={true} text={BASIS_LABEL[basis.basis] ?? basis.basis} />
+            : <EvidenceCheck ok={null} text="No recorded signal check" />}
         {basis?.traced === true && <EvidenceCheck ok={true} text="Syscall trace confirmed" />}
         {basis?.traced === false && <EvidenceCheck ok={false} text="Trace did not confirm — outcome downgraded" />}
-        <EvidenceCheck
-          ok={c.fix?.verdict === 'fix-verified' ? true : c.fix?.verdict === 'fix-rejected' ? false : null}
-          text={c.fix?.verdict ? `Fix verification: ${FIX_LABEL[c.fix.verdict] ?? c.fix.verdict}` : 'Fix verification: not run'} />
+        {c.fix
+          ? <EvidenceCheck ok={null} text={`Current remediation: ${FIX_LABEL[c.fix.verdict] ?? c.fix.verdict}${c.fix.ts ? ` (recorded separately)` : ''}`} />
+          : <EvidenceCheck ok={null} text="Fix verification: not run" />}
       </div>
       <h3 style={{ margin: '20px 0 4px' }}>Artifacts</h3>
+      {c.artifactsScope === 'run' && <div className="note" style={{ marginBottom: 4 }}>Evidence frozen with this run.</div>}
+      {(c.artifactsScope === 'current' || c.artifactsScope === 'mixed') && (
+        <div className="note" style={{ marginBottom: 4 }}>Latest recorded evidence{c.artifactsScope === 'mixed' ? ' + this run\u2019s frozen copies' : ''}.</div>
+      )}
       {c.artifacts && c.artifacts.length > 0
-        ? <ArtifactList artifacts={c.artifacts} />
-        : <div className="note">No recorded artifacts for this finding.</div>}
+        ? <ArtifactList artifacts={c.artifacts} onPreview={onPreview} />
+        : <div className="note">No recorded artifacts for this finding in this scope.</div>}
     </div>
   )
 }
 
-function OutputBlock({ artifactId }: { artifactId: string }) {
+function OutputBlock({ artifactId, truncated }: { artifactId: string; truncated?: boolean }) {
   const [text, setText] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [err, setErr] = useState(false)
@@ -128,7 +160,7 @@ function OutputBlock({ artifactId }: { artifactId: string }) {
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span className="note">Recorded output</span>
+        <span className="note">Recorded output{truncated ? ' (truncated by producer)' : ''}</span>
         <button className="iconbtn" aria-label="Copy recorded output" title="Copy output"
           onClick={() => { if (text) navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000) }) }}>
           <Copy size={15} />{copied && <span className="note">copied</span>}
@@ -244,16 +276,30 @@ function FixTab({ c }: { c: FindingCase }) {
 
 function HistoryTab({ c }: { c: FindingCase }) {
   const f = c.finding
-  const events = c.events ?? []
+  const [allRuns, setAllRuns] = useState(false)
+  const runEmpty = c.eventsScope === 'run-empty' && !allRuns
+  const All = c.eventsAll ?? []
+  const events = runEmpty ? [] : c.eventsScope === 'run' && !allRuns ? c.events ?? [] : All.length ? All : c.events ?? []
   return (
     <div>
       <div className="note" style={{ marginBottom: 8 }}>
-        {c.eventsScope === 'legacy'
-          ? 'Run-scoped history unavailable — this finding predates run records. Showing repository-wide events.'
-          : 'Recorded events that mention this finding.'}
+        {runEmpty
+          ? 'No recorded events for this finding in this run.'
+          : c.eventsScope === 'run'
+            ? (allRuns ? 'All-runs history (explicitly requested).' : `Recorded events for this finding in run ${c.run?.id ?? ''}.`)
+            : 'Recorded events that mention this finding (all runs).'}
       </div>
+      {c.eventsScope === 'run-empty' && (
+        <button className="linkbtn" onClick={() => setAllRuns(true)}>Show all-runs history</button>
+      )}
+      {c.eventsScope === 'run' && All.length > 0 && !allRuns && (
+        <button className="linkbtn" style={{ marginLeft: 12 }} onClick={() => setAllRuns(true)}>Show all runs</button>
+      )}
+      {(c.eventsScope === 'run' || c.eventsScope === 'run-empty') && allRuns && (
+        <button className="linkbtn" style={{ marginLeft: 12 }} onClick={() => setAllRuns(false)}>Back to this run</button>
+      )}
       {events.length === 0
-        ? <div className="dstate">No recorded events for this finding.</div>
+        ? (runEmpty ? null : <div className="dstate">No recorded events for this finding.</div>)
         : <EventList events={events} />}
       {f?.poc && (
         <div className="note" style={{ marginTop: 12 }}>

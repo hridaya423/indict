@@ -1,59 +1,68 @@
 # Dashboard implementation progress
 
-Executing `2026-09-20-dashboard-spec.md` + `DESIGN.md`. Reference:
+Executing `2026-09-20-dashboard-spec.md` + `DESIGN.md`, refined by
+`2026-09-20-dashboard-refinement-spec.md` (this pass supersedes the earlier
+blanket "complete" claim below). Reference:
 `docs/design/dashboard-concepts/04-approved-workspace.png` (1536×1024).
 
-Status: **complete** — all nine routes live, all release gates green.
+Status: **refinement pass landed; P0/P1 evidence and workflow fixes verified
+by tests. Remaining release items listed under "Open".**
 
-## Gates
+## Refinement pass — verified evidence (2026-09-20)
 
-| Step | Status | Evidence |
+| Audit finding | Fix | Evidence |
 | --- | --- | --- |
-| 1. Fixture + shell | done | `tests/fixture_board.py` (normal/live/stale/corrupt/never-scanned/degraded + `--big`); Playwright projects `e2e` + `visual` in `dashboard/playwright.config.ts` |
-| 2. Read contracts (/api/v1) | done | `indictment/board_data.py` projections + `indictment/board.py` routes; `tests/test_board_records.py` PASS (contract, error envelope, traversal, torn JSONL, read-only) |
-| 3. Structured producer records | done | `events.py` (stage-start/end, engine-outcome, verification-result), `pipeline.py` (run.json, stage boundaries, run snapshot, frozen source), `poc.py` (verification.jsonl), `fix.py` (verdict.json + gate.json) |
-| 4. Connected Overview + Findings | done | e2e tests 1–3; repo scans, selected run panel, findings table, inspector |
-| 5. Cases and artifacts | done | FindingCase with proof/evidence/fix/issue tabs; artifact preview + download with post-open identity revalidation |
-| 6. Runs and Repositories | done | e2e tests 4–5; timelines, engine lanes, event ledger |
-| 7. Fixes | done | e2e test 6; verdict + gate checks |
-| 8. Distribution + review | done | `indictment/board_dist/` built (JS 342KB / 98KB gzip, CSS 17KB / 4.3KB gzip); `./indict --board` serves SPA + legacy `/api/state`; Node not needed at runtime |
+| E01 proof borrowed across runs | `finding_case` resolves verification records by exact run scope: frozen `runs/<rid>/evidence/<id>/poc/verification.jsonl` wins, then `run` field match, then time-window; basis is the successful attempt, later failures listed separately | `tests/test_board_records.py` delta-repo block (`[board records] PASS`) |
+| E02 unknown run → latest fallback | Explicit `run=` validated; 404 `unknown-run` / `not-in-run` with `latestRun` hint; case page renders an explicit unavailable state with a latest-case link | same tests + e2e "unknown run is a real error" |
+| E03 mixed frozen/current evidence | Artifacts, rerun contract and source are run-scoped; historical runs without frozen evidence report partial/unavailable instead of borrowing latest; `artifactsScope` + warnings disambiguate | tests: fixture `delta` with run-B snapshot omitting the finding |
+| E04 output resolved by filename | Artifact entries carry `role`/`run`/`attempt`/`producerTruncated`; proof output picked by role (`stdout`) + attempt | type-level + artifact role mapping in `board_data.py` |
+| E05 raw-JSON preview tab | `ArtifactPreviewPane` — in-workspace viewer with copy/download, truncation banner, escaped mono text, Escape/close, abort-on-switch | e2e "artifact preview stays in-workspace" |
+| E06 cursor split-brain (`ts:` vs `e:`) | One server-owned opaque cursor contract: `cursor=` forward, `before=` older pages (chronological), `after=` live tail; run detail ships `eventsTailCursor`; client tracks contiguous offset windows — duplication/loss structurally impossible | tests: `before=`/page-overlap assertions; e2e ledger test |
+| E07 timeline without offsets | Segments and engine lanes positioned absolutely on one shared elapsed axis (left = (start-t0)/span); unknown ends render as dashed "end unknown" gaps; skipped/pending sit outside the axis; stale runs show "Last observed", not a ticking Now | visual geometry suite passes; unit-checked via e2e render |
+| E08 Hunt counts beside Verify | Progress keyed to the currently running stage (+ hunt lanes override during hunt); mismatched stage counters are dropped | fixture `theta` asserts `progress is None` while parked in `poc` |
+| E09 Follow live doing nothing | Only rendered on running runs; in run detail it drives the ledger (append + autoscroll, "N new events" chip when paused) | e2e "follow live only appears on a running run" |
+| E10 lost run/tab context | Tabs are URL state (`?tab=proof|source|reproduction|fix|history`, `repro` normalized); "Open full case" carries `run` + active `tab`; findings rows open the case with the row's run; return URL restores queue | e2e "finding case preserves run scope and tab in URL" |
+| E11 findings without inspector | `findings-grid` 60/40 list + inspector with compact ProofPanel; filters (status/severity/class/engine/nofix/sort/size/page) all live in the URL; "No passing fix recorded" label with correct semantics; dismissed hidden by default with a note; hidden selection closes with an explanation | e2e "findings row selection opens the inspector" |
+| E12 overview select/detail conflation | Row select control (radio button) + separate repo-name detail link; inventory capped at 4 rows with "View all N repositories"; findings capped at 5 with "View all N findings" | e2e bounded-inventory assertions |
+| E13 active nav never styled | `Link` forwards standard anchor attributes; `aria-current="page"` survives; exactly one active item asserted | visual suite |
+| E14 screenshot-only visual suite | Behavioral+visual gates: all nine routes at 1536×1024 and 1440×900, key routes at 1280×800 and 1920×1080, no horizontal overflow, geometry anchors (sidebar 200±8px, main x 216, equal lower split ±3%) | `npm run test:visual` 6/6; captures in `dashboard/shots/visual/` |
+| E16 `$` on hunt budget / kv sprawl | Budget rendered as `N min hunt budget`; labeled 2-col summary grid; counts link into scoped findings filters | typecheck + e2e repo detail render |
+| — | Watch registry isolation in tests: fixture root in tmp dir never reads the repo-local `watch.yaml` (registry lookup is relative to the findings root) | playwright fixture lives in `mkdtemp`; `reuseExistingServer: false` refuses foreign servers on the port |
 
-## Verification evidence
+Also: finding-id cells (`.fid`) truncate with ellipsis + full value in
+`title` across all tables — fixes ID/title column overlap; lists poll only
+while the tab is visible; stale runs stop elapsed at last observation;
+`verdict`/`cursor` filters on Fixes moved into the URL; fix verdict copy
+states that a passed local gate is not merge/deploy.
 
-- `npx tsc --noEmit` clean; `npm run build` clean.
-- Vitest: 5/5 (`tests/format.test.ts`).
-- Playwright e2e: **8/8** across all routes incl. keyboard nav + deep-link reload.
-- Playwright visual: **5/5** viewport passes (1536×1024, 1280×900, 1100×900 rail, 820×1100, 390×844) — 25 screenshots in `dashboard/shots/visual/`.
-- `bash tests/verify.sh`: selfcheck OK, all unit suites ok (paging, issues, fix, rerank, ops, sie, rank_semantic, dedup_semantic, board, tail), calibration **5/5** hits, doctor READY.
-- Perf: `/api/v1/overview` p95 = 19ms real data, **62ms** on `--big` fixture (50 repos / 10k findings) vs 500ms target.
+## Full verification (2026-09-20)
 
-## Decisions
+- `npx tsc --noEmit` clean; `npm run build` clean (JS 344.7 kB / 98.8 kB gzip).
+- Vitest 5/5 (`tests/format.test.ts`).
+- Playwright e2e **13/13** (`npm run test:e2e`).
+- Playwright visual **6/6** (`npm run test:visual`).
+- `uv run python tests/test_board_records.py` PASS (contract, security,
+  torn data, read-only, exact-scope evidence, cursors, progress isolation).
+- `bash tests/verify.sh`: selfcheck OK, all unit suites ok
+  (paging, issues, fix, rerank, ops, sie, rank_semantic, dedup_semantic,
+  board, tail, audit_fixes), calibration **5/5** hits, doctor READY.
 
-- Router: small hand-rolled history router (no react-router) — keeps JS
-  budget and matches spec's "small client router".
-- Icons: `@phosphor-icons/react` (DESIGN.md's named fallback; no icon
-  family installed).
-- Fonts: `@fontsource/ibm-plex-sans` 400/500/600 + `@fontsource/ibm-plex-mono`
-  400 — self-hosted woff2 via the bundle, `font-display: swap`. Latin
-  subsets only to keep generated asset volume down.
-- Run records: `runs/<run>/run.json` + `runs/<run>/findings.jsonl` written
-  by pipeline; `poc/<id>/verification.jsonl` per attempt; `fixes/<id>/gate.json`
-  structured checks. Legacy data without these records reads as
-  unknown/unavailable, never fabricated.
-- Vite `base: '/'` — relative base broke asset URLs on deep-route reloads.
-- Legacy `/api/state` + `/api/finding` retained for the old board path.
-- Package rename `crs` → `indictment`, CLI `scan` → `indict` landed
-  mid-build; all dashboard + backend files follow the new names.
-- `watch.py` alert kinds are now honest (`new-{status}` → `new-candidate`
-  is a real kind); `test_ops.py` assertion updated to match.
+## Open (not claimed)
 
-## Deviations from reference
+- Human visual review against the approved concept + regression baselines
+  from the approved render (spec §8.2 requires approval before baselining).
+- Performance re-measurement on the 50-repo/10k-finding/100k-event fixture
+  after these changes, and the 15-minute live-session check.
+- Manual keyboard walkthrough sign-off + measured contrast report.
+- Mobile/narrow refinement (deferred by decision), dark mode, write actions.
+- P2 residuals: per-page title deduplication polish (E15) partially landed;
+  Repositories page search/filter affordances are minimal.
 
-- None blocking. Findings/run tables use `table-layout: fixed` + 2-line
-  title clamps so long mono paths can't push the inspector off-canvas —
-  a readability refinement, not a visual departure.
+## Earlier record (superseded)
 
-## Next
-
-- Optional follow-ups: live tailing on the events ledger (SSE or poll),
-  run-vs-latest diff affordance in the case view.
+The previous "complete" section claimed all gates green from the original
+spec. The refinement audit found it overstated; see
+`docs/design/dashboard-audit/checkpoint.md` and the refinement spec's
+finding table. Historical notes: router is hand-rolled; icons
+`@phosphor-icons/react`; fonts self-hosted IBM Plex; rename `crs` →
+`indictment` landed mid-build.

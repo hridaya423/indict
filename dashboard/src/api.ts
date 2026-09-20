@@ -4,10 +4,13 @@ import { reportUpdated } from './updated'
 export class ApiError extends Error {
   code: string
   retryable: boolean
-  constructor(code: string, message: string, retryable = true) {
+  extra?: Record<string, unknown>
+  constructor(code: string, message: string, retryable = true,
+    extra?: Record<string, unknown>) {
     super(message)
     this.code = code
     this.retryable = retryable
+    this.extra = extra
   }
 }
 
@@ -19,7 +22,7 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
     if ((e as Error).name === 'AbortError') throw e
     throw new ApiError('unavailable', 'Cannot reach the board', true)
   }
-  let body: { error?: { code?: string; message?: string; retryable?: boolean } } | null = null
+  let body: ({ error?: { code?: string; message?: string; retryable?: boolean } } & Record<string, unknown>) | null = null
   try {
     body = await res.json()
   } catch {
@@ -27,7 +30,10 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   }
   if (!res.ok) {
     const err = body?.error
-    throw new ApiError(err?.code ?? `http-${res.status}`, err?.message ?? `HTTP ${res.status}`, err?.retryable ?? res.status >= 500)
+    const extra: Record<string, unknown> = {}
+    for (const k of Object.keys(body ?? {})) if (k !== 'error') extra[k] = (body as Record<string, unknown>)[k]
+    throw new ApiError(err?.code ?? `http-${res.status}`, err?.message ?? `HTTP ${res.status}`,
+      err?.retryable ?? res.status >= 500, extra)
   }
   return body as T
 }
@@ -98,12 +104,22 @@ export function useResource<T>(
     }
     const schedule = (ms: number) => {
       if (timerRef.current) clearTimeout(timerRef.current)
-      if (ms <= 0) return
+      if (ms <= 0 || document.hidden) return
       timerRef.current = setTimeout(() => { if (!cancelled) run() }, ms)
     }
+    const onVisible = () => {
+      if (cancelled) return
+      if (document.hidden) {
+        if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
+      } else {
+        run()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
     run()
     return () => {
       cancelled = true
+      document.removeEventListener('visibilitychange', onVisible)
       abortRef.current?.abort()
       if (timerRef.current) clearTimeout(timerRef.current)
     }

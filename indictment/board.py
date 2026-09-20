@@ -127,7 +127,10 @@ def _repo(repo_dir: Path) -> dict:
 def _state_payload(root: Path) -> dict:
     repos = []
     if root.is_dir():
+        calib = bd._calib_names(root)
         for d in sorted(root.iterdir(), key=lambda p: p.name):
+            if d.name in calib:
+                continue
             if d.is_dir() and (d / "findings.jsonl").exists():
                 try:
                     repos.append(_repo(d))
@@ -306,7 +309,9 @@ class _Handler(BaseHTTPRequestHandler):
             if len(seg) == 5 and seg[2] == "runs" and seg[4] == "events":
                 out = bd.run_events(repo_dir, seg[3],
                                     cursor=_q1(q, "cursor"),
-                                    limit=_qint(q, "limit", 100, 1, 100))
+                                    limit=_qint(q, "limit", 100, 1, 100),
+                                    before=_q1(q, "before"),
+                                    after=_q1(q, "after"))
                 if out is None:
                     self._err(404, "unknown-run", "no such run", False)
                 else:
@@ -315,9 +320,18 @@ class _Handler(BaseHTTPRequestHandler):
             if len(seg) == 4 and seg[2] == "findings":
                 out = bd.finding_case(root, repo, seg[3],
                                       run=_q1(q, "run"))
-                if out.get("finding") is None:
-                    self._err(404, "unknown-finding",
-                              "no such finding", False)
+                rerr = out.get("runError")
+                if rerr or out.get("finding") is None:
+                    self._send(json.dumps({
+                        "error": {
+                            "code": rerr or "unknown-finding",
+                            "message": {"unknown-run": "no such run",
+                                        "not-in-run": "finding not recorded "
+                                                      "in this run"}.get(
+                                            rerr, "no such finding"),
+                            "retryable": False},
+                        "latestRun": out.get("latestRun")}).encode(),
+                        "application/json", 404)
                 else:
                     self._json(out)
                 return

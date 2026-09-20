@@ -13,7 +13,7 @@ export interface StagePending { id: string; label: string; state: string; reason
 export interface EngineLane {
   id: string; label: string; engine?: string; model?: string | null
   outcome?: string; reason?: string | null; added?: number | null
-  startedAt: number | null; endedAt: number
+  startedAt: number | null; endedAt: number | null
   state: string
 }
 export interface Progress { completed: number | null; total: number | null; unit: string; stage?: string; msg?: string }
@@ -39,6 +39,7 @@ export interface RunSummary {
 }
 export interface RunDetail extends RunSummary {
   eventsTail: EventRow[]; eventsTotal: number; eventsMalformed?: number
+  eventsTailCursor?: string | null
   findingsTotal: number
 }
 export interface EventRow {
@@ -90,11 +91,14 @@ export interface SourceExcerpt {
 export interface ArtifactEntry {
   id: string; name: string; path: string; size: number | null
   type: string; previewable: boolean
+  role?: 'stdout' | 'stderr' | 'script' | 'verification' | 'source' | 'patch' | 'pack' | 'other' | string
+  run?: string | null; attempt?: number | null; producerTruncated?: boolean
 }
 export interface FixSummary {
   verdict: string; reason?: string; backend?: string; ts?: number | null
   checks?: GateCheck[] | null; baseSha?: string | null
   artifacts?: ArtifactEntry[]; issue?: string | null
+  scope?: string
 }
 export interface GateCheck { id: string; outcome: string; detail?: string }
 export interface FindingCase {
@@ -102,13 +106,17 @@ export interface FindingCase {
   warnings: string[]
   writeup?: string
   run: { id: string; state: RunState; freshness: Freshness; revision: string | null } | null
+  runError?: string; latestRun?: string | null
   proof?: {
     claim: string | null; verdict: string; basis: VerificationRecord | null
     attempts: VerificationRecord[]; reproduced: boolean
     recordedVerified: boolean; rerunContract: Record<string, unknown> | null
+    laterFailures?: VerificationRecord[]
   }
-  events?: EventRow[]; eventsScope?: string
+  events?: EventRow[]; eventsScope?: 'run' | 'all-runs' | 'run-empty' | string
+  eventsAll?: EventRow[]
   artifacts?: ArtifactEntry[]
+  artifactsScope?: string
   pack?: ArtifactEntry | null
   fix?: FixSummary | null
   related?: { id: string; title: string | null; kind: string }[]
@@ -123,7 +131,10 @@ export interface FindingsResp extends ListResp<FindingRow> {
   page: number; pages: number
   counts: Record<string, number>
 }
-export interface EventsResp extends ListResp<EventRow> { legacy?: boolean }
+export interface EventsResp extends ListResp<EventRow> {
+  legacy?: boolean
+  prevCursor?: string | null
+}
 export interface FixRow {
   findingId: string; repo: string; title: string; severity: string
   status: string; verdict: string; reason?: string; backend?: string

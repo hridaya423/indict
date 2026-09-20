@@ -138,6 +138,51 @@ def main() -> None:
         code, nf = _get(port, "/api/v1/repos/alpha/findings/deadbeefdead")
         assert code == 404, nf
 
+        # ── exact-scope evidence (audit E01/E02/E03) ─────────────────
+        code, dl = _get(port, "/api/v1/findings?repo=delta&status=verified")
+        assert code == 200 and dl["items"], dl
+        dfid = dl["items"][0]["id"]
+        rid_a, rid_b = "20260105-000000-66666", "20260106-000000-77777"
+        # run A keeps its own successful basis even though run B later failed
+        code, ca = _get(port, f"/api/v1/repos/delta/findings/{dfid}?run={rid_a}")
+        assert code == 200, ca
+        assert ca["proof"]["reproduced"] is True, ca["proof"]
+        assert ca["proof"]["basis"]["outcome"] == "matched"
+        assert ca["proof"]["basis"].get("run") == rid_a
+        assert not ca["proof"]["laterFailures"], ca["proof"]["laterFailures"]
+        assert ca["artifactsScope"] in ("current", "mixed")
+        # unknown run is a hard 404, never a silent latest fallback
+        code, unk = _get(port, f"/api/v1/repos/delta/findings/{dfid}?run=nope")
+        assert code == 404 and unk["error"]["code"] == "unknown-run", unk
+        assert unk.get("latestRun") == rid_b, unk
+        # finding absent from run B's snapshot is absent — no borrowed proof
+        code, cb = _get(port, f"/api/v1/repos/delta/findings/{dfid}?run={rid_b}")
+        assert code == 404 and cb["error"]["code"] == "not-in-run", cb
+        # latest scope shows both attempts, basis stays the successful one,
+        # and the later failure is presented separately
+        code, cl = _get(port, f"/api/v1/repos/delta/findings/{dfid}")
+        assert code == 200 and len(cl["proof"]["attempts"]) == 2, cl["proof"]
+        assert cl["proof"]["basis"]["outcome"] == "matched"
+        assert len(cl["proof"]["laterFailures"]) == 1
+        assert cl["proof"]["laterFailures"][0]["outcome"] == "no-signal"
+
+        # ── event cursors + progress isolation (E06/E08) ─────────────
+        code, rd = _get(port, "/api/v1/repos/alpha/runs/20260101-000000-11111")
+        assert rd["eventsTailCursor"] == f"e:{rd['eventsTotal'] - 3}", rd
+        code, page1 = _get(port, "/api/v1/repos/alpha/runs/20260101-000000-11111"
+                                 "/events?limit=5")
+        code, older = _get(port, "/api/v1/repos/alpha/runs/20260101-000000-11111"
+                                 "/events?before=e:5&limit=3")
+        assert code == 200 and older["items"][-1] == page1["items"][-1], older
+        assert older["prevCursor"] == "e:2", older
+        code, tail0 = _get(port, "/api/v1/repos/alpha/runs/20260101-000000-11111"
+                                 f"/events?after=e:{rd['eventsTotal']}")
+        assert code == 200 and tail0["items"] == [], tail0
+        # theta: running run parked in poc — Hunt's 3/3 must not surface
+        code, th = _get(port, "/api/v1/repos/theta/runs/20260107-000000-88888")
+        assert code == 200 and th["currentStage"]["id"] == "poc", th.get("currentStage")
+        assert th["progress"] is None, th["progress"]
+
         # ── fixes ────────────────────────────────────────────────────
         code, fx = _get(port, "/api/v1/fixes")
         assert code == 200 and fx["total"] >= 1
