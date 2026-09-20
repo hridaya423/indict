@@ -55,6 +55,19 @@ SKIP_DIRS = ("test", "tests", "spec", "docs", "examples", ".git",
 # their keyword density outranks real source
 SKIP_FILE_RE = re.compile(r"\.min\.|^build[-_.]|[.-]bundle\.", re.I)
 
+# semantic descriptors — embedded once per run, compared against each
+# queue entry's sink-dense window (crs/sie.py)
+VULN_QUERIES = [
+    "user input reaches command execution",
+    "deserialization of untrusted data",
+    "SQL query built from request parameters",
+    "path built from user-controlled filename",
+    "OAuth token handling and refresh",
+    "webhook signature verification",
+    "prototype pollution via deep merge",
+    "secret or credential hardcoded in source",
+]
+
 
 def score_file(root: Path, rel: str, sweep_hits: int = 0) -> float:
     try:
@@ -100,4 +113,42 @@ def rank(root: Path, candidates: list[Finding],
             s += 4.0
         queue.append({"file": rel, "score": round(s, 2)})
     queue.sort(key=lambda q: -q["score"])
-    return queue[:top]
+    return _semantic_boost(root, queue[:top])
+
+
+def _window(root: Path, rel: str) -> str:
+    """Sink-dense window: 40 lines around the line with the most SINKS
+    hits (first 40 when the file has no sink match)."""
+    try:
+        lines = (root / rel).read_text(errors="replace").splitlines()
+    except Exception:
+        return ""
+    if not lines:
+        return ""
+    counts = [len(SINKS.findall(l)) for l in lines]
+    mid = max(range(len(lines)), key=lambda i: counts[i]) if any(counts) else 0
+    lo = max(0, mid - 20)
+    return "\n".join(lines[lo:lo + 40])
+
+
+def _semantic_boost(root: Path, queue: list[dict]) -> list[dict]:
+    """Fallback-safe semantic rerank on top of the keyword queue."""
+    if not queue:
+        return queue
+    from . import sie  # late: keeps sie import out of the rank import path
+    desc_vecs = sie.embed(VULN_QUERIES)
+    if desc_vecs is None:
+        print("[rank] semantic ranking off (no SIE key)", flush=True)
+        return queue
+    win_vecs = sie.embed([_window(root, q["file"]) for q in queue])
+    if win_vecs is None or len(win_vecs) != len(queue):
+        return queue  # partial failure — keep keyword order, silently
+    before = [q["file"] for q in queue]
+    for q, w in zip(queue, win_vecs):
+        q["score"] = round(q["score"] + 6.0 * max(
+            (sie.cos(w, d) + 1) / 2 for d in desc_vecs), 4)
+    queue.sort(key=lambda q: -q["score"])
+    reordered = sum(1 for a, b in zip(before, [q["file"] for q in queue])
+                    if a != b)
+    print(f"[rank] semantic boost applied (+{reordered} reordered)", flush=True)
+    return queue

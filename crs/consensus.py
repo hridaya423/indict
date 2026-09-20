@@ -31,7 +31,47 @@ def pool(findings: list[Finding]) -> list[Finding]:
                 merged.extend(_merge_cluster(cluster))
                 cluster = [f]
         merged.extend(_merge_cluster(cluster))
-    return merged
+    return _semantic_dedup(merged)
+
+
+def _semantic_dedup(findings: list[Finding]) -> list[Finding]:
+    """Cross-file near-duplicate merge via embedding cosine (>=0.90).
+
+    Same-file leftovers stay untouched — adjacency clustering owns those.
+    Findings with <80 chars of detail carry too little signal to compare.
+    """
+    from . import sie  # late: keeps sie optional at import time
+    groups: dict[str, list[Finding]] = {}
+    for f in findings:
+        groups.setdefault(f.vuln_class, []).append(f)
+    out = list(findings)
+    removed: set[int] = set()
+    off = False
+    for members in groups.values():
+        if len({m.file for m in members}) < 2 or len(members) > 40:
+            continue
+        eligible = [m for m in members if len(m.detail) >= 80]
+        if len(eligible) < 2:
+            continue
+        vecs = sie.embed([f"{m.title}\n{m.detail[:500]}" for m in eligible])
+        if vecs is None:
+            if not off:
+                print("[consensus] semantic dedup off", flush=True)
+                off = True
+            continue
+        pairs = sorted(
+            ((sie.cos(vecs[i], vecs[j]), eligible[i], eligible[j])
+             for i in range(len(eligible))
+             for j in range(i + 1, len(eligible))),
+            key=lambda p: -p[0])
+        for c, a, b in pairs:
+            if c < 0.90 or id(a) in removed or id(b) in removed:
+                continue
+            win, lose = (a, b) if a.confidence >= b.confidence else (b, a)
+            win.tags.append("semantic-duplicate")
+            win.detail += f"\n[semantic-duplicate of {lose.file}:{lose.line}]"
+            removed.add(id(lose))
+    return [f for f in out if id(f) not in removed]
 
 
 def _merge_cluster(members: list[Finding]) -> list[Finding]:
