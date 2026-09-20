@@ -51,6 +51,8 @@ _SECRET_PATTERNS = {
                "DB connection string with credentials"),
 }
 _SECRET_FPS = re.compile(r"xxxx|example|sample|placeholder|<[^>]+>|\{\{|chomp", re.I)
+# public alias — issues.py redacts outgoing issue text with the same pack
+SECRET_RES = _SECRET_PATTERNS
 _MAX_PER_FILE = 3
 
 

@@ -175,6 +175,10 @@ def prove(root: Path, resolver: Resolver, client: Client | None,
                 f.confidence = 0.98 if traced else 0.97
                 if traced:
                     f.tags.append("line-verified")
+                # the fix gate re-runs this script on patched code and
+                # requires the signal to disappear — record the contract
+                (pdir / "rerun.json").write_text(json.dumps(
+                    {"script": sname, "signal": signal, "lang": lang}))
                 f.detail += (f"\nPoC evidence ({pdir}):\n{output[:800]}"
                            f"\nReproduce: bash {RUN_POC} {root.resolve()} "
                            f"{pdir} {lang} {sname}")
@@ -211,6 +215,11 @@ def prove(root: Path, resolver: Resolver, client: Client | None,
                         "runner failed", "Connection refused",
                         "Name or service not known"))
                     if ssignal in soutput and not dead:
+                        # service probes need a live redeploy to re-verify —
+                        # the fix gate can't rerun them against patched code
+                        (pdir / "rerun.json").write_text(json.dumps(
+                            {"script": "service-probe.sh", "signal": ssignal,
+                             "lang": lang, "kind": "service"}))
                         f.status = "verified"
                         f.tags += ["poc-verified", "service-verified"]
                         f.confidence = max(f.confidence, 0.98)
@@ -255,6 +264,9 @@ def prove(root: Path, resolver: Resolver, client: Client | None,
                     f.verdict += (f" | probe fired but {f.file}:{f.line} "
                                   f"never executed — wrong site claimed")
                 else:
+                    (pdir / "rerun.json").write_text(json.dumps(
+                        {"script": "probe.sh", "signal": signal,
+                         "lang": lang}))
                     f.status = "verified"
                     f.tags += ["poc-verified", "probe"]
                     f.confidence = 0.96 if traced else 0.95

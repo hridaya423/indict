@@ -36,6 +36,15 @@ models:
     open_weight: true
     roles: [hunt, triage, poc]
 
+  # small tier on the same endpoint — issue drafting / cheap summaries.
+  # kept out of hunt roles so it never gets picked for real reasoning.
+  - name: sie-small
+    base_url: https://api.superlinked.com/v1
+    model: Qwen/Qwen3.5-4B
+    api_key_env: SIE_API_KEY
+    open_weight: true
+    roles: [draft]
+
   - name: lmstudio
     base_url: http://localhost:1234/v1
     model: local-model

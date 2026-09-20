@@ -79,10 +79,30 @@ def _cycle(entry: dict, local: Path, work_root: Path, cli_models: list,
         kw["since"] = st["last_sha"]
     pipeline.run(str(local), **kw)
     # pipeline recorded fresh state — alert on ids that just appeared
-    for f in store_load(fdir / "findings.jsonl"):
-        if f.id not in old_ids and f.status != "dismissed":
-            alerts.emit(name, f, "new-verified" if f.status == "verified"
-                       else "new-adjudicated", out_root=work_root)
+    new = [f for f in store_load(fdir / "findings.jsonl")
+           if f.id not in old_ids and f.status != "dismissed"]
+    for f in new:
+        alerts.emit(name, f, "new-verified" if f.status == "verified"
+                    else "new-adjudicated", out_root=work_root)
+    # closed-loop opt-ins (env): auto-file issues / auto-dispatch fixes on
+    # verified findings only — adjudicated stays human-triaged
+    if os.environ.get("CRS_AUTO_ISSUE") == "1" and new:
+        try:
+            from . import issues
+            from .llms import Client, load_models
+            issues.run(name, work_root, Client(load_models()),
+                       file_issues=True)
+        except Exception as e:
+            print(f"[watch] {name}: auto-issue failed: {e}", flush=True)
+    if os.environ.get("CRS_FIX_AUTO") == "1":
+        from . import fix
+        for f in new:
+            if f.status == "verified" and "fix-verified" not in f.tags:
+                try:
+                    fix.run(name, f.id, work_root, root=local)
+                except Exception as e:
+                    print(f"[watch] {name}: auto-fix {f.id} failed: {e}",
+                          flush=True)
 
 
 def main(registry: Path, models: str | None = None, budget: int = 0,

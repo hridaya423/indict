@@ -68,6 +68,18 @@ def main() -> None:
                          "CRS_WATCH_ONCE=1 works too)")
     ap.add_argument("--registry", default="watch.yaml", metavar="YAML",
                     help="watch registry path (default watch.yaml)")
+    ap.add_argument("--issue", metavar="REPO",
+                    help="draft GitHub issues for verified/adjudicated "
+                         "findings — dry-run unless --file plus "
+                         "GITHUB_TOKEN+CRS_ISSUE_REPO (our repos only)")
+    ap.add_argument("--file", action="store_true",
+                    help="with --issue: actually file the drafted issues")
+    ap.add_argument("--explain", nargs=2, metavar=("REPO", "FINDING_ID"),
+                    help="print the full evidence trail for one finding")
+    ap.add_argument("--fix", nargs=2, metavar=("REPO", "FINDING_ID"),
+                    help="dispatch a verified finding to the fixer agent "
+                         "(CRS_FIXER) in a worktree, then the gate: PoC "
+                         "must die + patch diff rescans clean")
     a = ap.parse_args()
     if a.doctor:
         doctor()
@@ -79,6 +91,21 @@ def main() -> None:
         from . import watch
         watch.main(Path(a.registry).expanduser(), models=a.models,
                    budget=a.hunt_budget, once=a.watch_once)
+        return
+    out_root = Path(a.out).expanduser() if a.out else FINDINGS
+    if a.explain:
+        from . import explain
+        explain.show(a.explain[0], a.explain[1], out_root)
+        return
+    if a.issue:
+        from . import issues
+        from .llms import Client, load_models
+        issues.run(a.issue, out_root, Client(load_models()),
+                   file_issues=a.file)
+        return
+    if a.fix:
+        from . import fix
+        fix.run(a.fix[0], a.fix[1], out_root)
         return
     if not a.target:
         ap.error("target required")
