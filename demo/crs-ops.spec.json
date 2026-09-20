@@ -1,40 +1,310 @@
 {
   "layout": "graph",
-  "direction": "right",
+  "direction": "down",
   "style": "default",
   "animation": "flow",
-  "title": { "prefix": "How", "highlight": "CRS-OPS", "subtitle": "AI watches your code, hunts bugs, and proves them — on repeat" },
-  "canvas": { "fps": 20, "frames": 41 },
+  "title": {
+    "prefix": "How",
+    "highlight": "CRS-OPS",
+    "subtitle": "it watches code, six hunters find bugs, a judge kills fakes, a sandbox proves the rest \u2014 then it pages you, files the ticket, and checks its own fix"
+  },
+  "canvas": {
+    "fps": 20,
+    "frames": 41
+  },
   "nodes": [
-    { "id": "repos", "label": "Git repos", "icon": "folder", "body": "the code we guard", "kind": "terminal", "accent": "cyan" },
-    { "id": "watch", "label": "Watch", "icon": "eye", "body": "polls for new commits", "accent": "cyan" },
-    { "id": "state", "label": "Memory", "icon": "db", "body": "last commit + known bugs", "accent": "muted" },
-    { "id": "scan", "label": "Scan", "icon": "scan", "body": "clone · map · fast scanners" },
-    { "id": "rank", "label": "Rank", "icon": "score", "body": "suspicious files first\n(semantic embeddings)" },
-    { "id": "hunt", "label": "AI hunt", "icon": "brain", "body": "6 engines read code,\nask for more context", "accent": "purple" },
-    { "id": "dedup", "label": "Dedup", "icon": "merge", "body": "same bug → one card" },
-    { "id": "judge", "label": "Judge", "icon": "guardrail", "body": "file+line exist · chain resolves\na 2nd AI attacks the claim" },
-    { "id": "gate", "label": "Real?", "kind": "decision" },
-    { "id": "dropped", "label": "Dropped", "kind": "terminal", "accent": "pink", "body": "fake or unproven" },
-    { "id": "prove", "label": "Prove", "icon": "sandbox", "body": "exploit in a locked box —\nthe claimed line must run\n(reranker picks order)", "accent": "amber" },
-    { "id": "report", "label": "Report + alert", "icon": "broadcast", "kind": "terminal", "accent": "green", "body": "markdown · SARIF · webhook" },
-    { "id": "models", "label": "Open models", "icon": "model", "body": "Devin ACP + SIE\nthink · embed · rerank", "accent": "muted" }
+    {
+      "id": "repos",
+      "label": "Git repos",
+      "icon": "folder",
+      "body": "the code we guard",
+      "kind": "terminal",
+      "accent": "cyan"
+    },
+    {
+      "id": "watch",
+      "label": "Watch",
+      "icon": "eye",
+      "body": "polls for new commits",
+      "accent": "cyan"
+    },
+    {
+      "id": "memory",
+      "label": "Memory",
+      "icon": "db",
+      "body": "last commit + known bugs",
+      "accent": "muted"
+    },
+    {
+      "id": "scan",
+      "label": "Scan",
+      "icon": "ingest",
+      "body": "clone \u00b7 map \u00b7 build the file index"
+    },
+    {
+      "id": "sweep",
+      "label": "Sweep",
+      "icon": "scan",
+      "body": "semgrep \u00b7 secrets \u00b7 dep CVEs"
+    },
+    {
+      "id": "rank",
+      "label": "Rank",
+      "icon": "score",
+      "body": "suspicious files first\n(semantic embeddings)"
+    },
+    {
+      "id": "hunter",
+      "label": "Hunter",
+      "icon": "brain",
+      "body": "follows input \u2192\ndangerous call",
+      "accent": "purple"
+    },
+    {
+      "id": "explorer",
+      "label": "Explorer",
+      "icon": "eye",
+      "body": "dangerous call \u2192 trace\nback to user input",
+      "accent": "purple"
+    },
+    {
+      "id": "taintgen",
+      "label": "Taintgen",
+      "icon": "gear",
+      "body": "writes custom scan rules,\nruns them on the repo",
+      "accent": "purple"
+    },
+    {
+      "id": "variant",
+      "label": "Variant",
+      "icon": "clock",
+      "body": "old fixes hide twin bugs",
+      "accent": "purple"
+    },
+    {
+      "id": "fuzzlite",
+      "label": "Fuzzlite",
+      "icon": "experiment",
+      "body": "crashes become leads",
+      "accent": "purple"
+    },
+    {
+      "id": "pool",
+      "label": "Candidate pile",
+      "icon": "queue",
+      "body": "every engine drops leads here"
+    },
+    {
+      "id": "dedup",
+      "label": "Dedup",
+      "icon": "merge",
+      "body": "same bug \u2192 one card"
+    },
+    {
+      "id": "judge",
+      "label": "Judge",
+      "icon": "guardrail",
+      "body": "chain resolves \u00b7 a 2nd AI\nattacks the claim"
+    },
+    {
+      "id": "gate",
+      "label": "Real?",
+      "kind": "decision"
+    },
+    {
+      "id": "dropped",
+      "label": "Dropped",
+      "kind": "terminal",
+      "accent": "pink",
+      "body": "fake or unproven"
+    },
+    {
+      "id": "prove",
+      "label": "Prove",
+      "icon": "sandbox",
+      "body": "exploit in a locked box \u2014\nclaimed line must run",
+      "accent": "amber"
+    },
+    {
+      "id": "report",
+      "label": "Report",
+      "icon": "clipboard",
+      "body": "markdown \u00b7 SARIF \u00b7 alerts.jsonl"
+    },
+    {
+      "id": "notify",
+      "label": "Page + file issue",
+      "icon": "webhook",
+      "body": "critical \u2192 SMS + call\n4B drafts the issue",
+      "accent": "cyan"
+    },
+    {
+      "id": "fixer",
+      "label": "Fixer agent",
+      "icon": "agent",
+      "body": "your agent patches it\nin an isolated worktree",
+      "accent": "purple"
+    },
+    {
+      "id": "fixgate",
+      "label": "Fix real?",
+      "kind": "decision"
+    },
+    {
+      "id": "verified",
+      "label": "Fix verified",
+      "kind": "terminal",
+      "accent": "green",
+      "body": "PoC dead \u00b7 patch rescans clean\nverdict lands on the issue"
+    },
+    {
+      "id": "models",
+      "label": "Open models",
+      "icon": "model",
+      "body": "Devin ACP + SIE\nthink \u00b7 embed \u00b7 rerank",
+      "accent": "muted"
+    }
   ],
   "edges": [
-    { "from": "repos", "to": "watch" },
-    { "from": "watch", "to": "state", "label": "remember", "style": "dashed" },
-    { "from": "watch", "to": "scan", "label": "scan what changed" },
-    { "from": "scan", "to": "rank" },
-    { "from": "rank", "to": "hunt", "label": "top files" },
-    { "from": "hunt", "to": "dedup", "label": "candidate bugs" },
-    { "from": "dedup", "to": "judge" },
-    { "from": "judge", "to": "gate" },
-    { "from": "gate", "to": "dropped", "label": "fake", "accent": "pink" },
-    { "from": "gate", "to": "prove", "label": "survives" },
-    { "from": "prove", "to": "report", "label": "verified" },
-    { "from": "models", "to": "hunt", "label": "powers the AI", "accent": "purple", "style": "dashed" },
-    { "from": "report", "to": "watch", "kind": "loop", "label": "new commit → rescan", "accent": "cyan" }
+    {
+      "from": "repos",
+      "to": "watch"
+    },
+    {
+      "from": "watch",
+      "to": "memory",
+      "label": "remember",
+      "style": "dashed"
+    },
+    {
+      "from": "watch",
+      "to": "scan",
+      "label": "scan what changed"
+    },
+    {
+      "from": "scan",
+      "to": "sweep",
+      "label": "deterministic"
+    },
+    {
+      "from": "scan",
+      "to": "rank"
+    },
+    {
+      "from": "sweep",
+      "to": "pool",
+      "label": "findings"
+    },
+    {
+      "from": "rank",
+      "to": "hunter"
+    },
+    {
+      "from": "rank",
+      "to": "explorer"
+    },
+    {
+      "from": "rank",
+      "to": "taintgen"
+    },
+    {
+      "from": "rank",
+      "to": "variant"
+    },
+    {
+      "from": "rank",
+      "to": "fuzzlite"
+    },
+    {
+      "from": "hunter",
+      "to": "pool"
+    },
+    {
+      "from": "explorer",
+      "to": "pool"
+    },
+    {
+      "from": "taintgen",
+      "to": "pool"
+    },
+    {
+      "from": "variant",
+      "to": "pool"
+    },
+    {
+      "from": "fuzzlite",
+      "to": "pool"
+    },
+    {
+      "from": "pool",
+      "to": "dedup"
+    },
+    {
+      "from": "dedup",
+      "to": "judge"
+    },
+    {
+      "from": "judge",
+      "to": "gate"
+    },
+    {
+      "from": "gate",
+      "to": "dropped",
+      "label": "fake",
+      "accent": "pink"
+    },
+    {
+      "from": "gate",
+      "to": "prove",
+      "label": "survives"
+    },
+    {
+      "from": "prove",
+      "to": "report",
+      "label": "verified"
+    },
+    {
+      "from": "report",
+      "to": "notify",
+      "label": "new verified bug"
+    },
+    {
+      "from": "notify",
+      "to": "fixer",
+      "label": "dispatch"
+    },
+    {
+      "from": "fixer",
+      "to": "fixgate",
+      "label": "patch"
+    },
+    {
+      "from": "fixgate",
+      "to": "verified",
+      "label": "PoC dies + clean diff"
+    },
+    {
+      "from": "fixgate",
+      "to": "report",
+      "label": "rejected",
+      "style": "dashed",
+      "accent": "pink"
+    },
+    {
+      "from": "models",
+      "to": "hunter",
+      "label": "powers the AI",
+      "accent": "purple",
+      "style": "dashed"
+    },
+    {
+      "from": "report",
+      "to": "watch",
+      "kind": "loop",
+      "label": "new commit \u2192 rescan",
+      "accent": "cyan"
+    }
   ],
-  "footer": "the model proposes — the mechanics decide. nothing ships without proof.",
-  "signature": "CRS-OPS · AI Tinkerers"
+  "footer": "the model proposes \u2014 the mechanics decide. nothing ships without proof, not even the fix.",
+  "signature": "CRS-OPS \u00b7 AI Tinkerers"
 }
