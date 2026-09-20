@@ -1,0 +1,62 @@
+# Model registry. Any OpenAI-compatible endpoint works.
+# open_weight: true  -> usable when --open-only / rules require open-source LLMs
+# roles: which pipeline stages may use it (omit = all stages)
+# Order matters: first matching model for a role is primary, rest are fallback.
+models:
+  - name: deepseek
+    base_url: https://api.deepseek.com/v1
+    model: deepseek-chat
+    api_key_env: DEEPSEEK_API_KEY
+    open_weight: true
+    roles: [hunt, triage, poc]
+
+  - name: glm
+    base_url: https://api.z.ai/api/paas/v4
+    model: glm-4.6
+    api_key_env: ZAI_API_KEY
+    open_weight: true
+    roles: [hunt, triage, poc]
+
+  - name: local
+    base_url: http://localhost:11434/v1
+    model: qwen3-coder:30b
+    api_key_env: ""          # ollama ignores the key
+    open_weight: true
+    roles: [hunt, triage, poc, cheap]
+
+  # Superlinked SIE Cloud — most capable model in their catalog (Apache-2.0).
+  # NOTE: served with 8k context / 4k max output — run with
+  #   CRS_MAX_TOKENS=4096 CRS_MAX_FILE_LINES=400
+  # (no --frontier; the agent loop's context-requests carry the depth)
+  - name: sie
+    base_url: https://api.superlinked.com/v1
+    model: Qwen/Qwen3.6-27B
+    api_key_env: SIE_API_KEY
+    open_weight: true
+    roles: [hunt, triage, poc]
+
+  - name: lmstudio
+    base_url: http://localhost:1234/v1
+    model: local-model
+    api_key_env: ""
+    open_weight: true
+    roles: [cheap]
+
+  - name: smoke
+    base_url: http://localhost:11434/v1
+    model: qwen2.5-coder:1.5b  # tiny coder model — harness smoke + calibration
+    api_key_env: ""
+    open_weight: true
+
+  - name: smoke2
+    base_url: http://localhost:11434/v1
+    model: qwen2.5-coder:0.5b  # second local model — exercises consensus pooling
+    api_key_env: ""
+    open_weight: true
+
+  - name: vibeproxy
+    base_url: http://localhost:8317/v1
+    model: auto               # fronts Claude Code / Codex subscription
+    api_key_env: ""
+    open_weight: false        # NOT for CRS inference if rules say open-only
+    roles: [hunt, triage, poc]

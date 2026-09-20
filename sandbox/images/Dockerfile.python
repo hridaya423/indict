@@ -1,0 +1,8 @@
+FROM python:3.12-slim
+# pure-python deps for exercising target repos (requests needs urllib3 etc.)
+RUN pip install --no-cache-dir requests flask pyyaml urllib3 idna certifi charset-normalizer
+# atheris needs a C toolchain — optional, fuzzlite degrades gracefully
+RUN pip install --no-cache-dir atheris 2>/dev/null || true
+# line-level execution tracing for the PoC stage (CRS_TRACE=1 activates)
+COPY python/sitecustomize.py /usr/local/lib/python3.12/site-packages/sitecustomize.py
+WORKDIR /src

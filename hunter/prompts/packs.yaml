@@ -1,0 +1,140 @@
+# Per-language vuln packs for the hunter engine.
+# classes: bug classes to hunt; sinks: dangerous calls; sources: attacker input.
+
+python:
+  classes: [rce, lfi, afo, xss, sqli, ssrf, idor, deser, template-injection, path-traversal, cmd-injection, auth-bypass]
+  sinks:
+    - "exec/eval/subprocess/os.system/os.popen/pty.spawn"
+    - "pickle.loads/yaml.load/marshal.loads/jsonpickle.decode"
+    - "os.path.join/open/read/write on user-controlled paths"
+    - "cursor.execute/ORM .raw()/.extra() with string concat"
+    - "requests.get/urllib.urlopen on user-controlled URL"
+    - "Authorization/Proxy-Authorization/cookie headers re-sent across redirects or to untrusted hosts"
+    - "render_template_string/Template(f-string or concat)"
+    - "mark_safe/format_html on user data; send_file/open redirects"
+    - "re.compile/regex patterns on user-controlled input (catastrophic backtracking)"
+  sources:
+    - "flask/django/fastapi request args/form/json/files/headers"
+    - "sys.argv/stdin, socket.recv, file uploads"
+    - "celery/queue message payloads"
+
+javascript: &js
+  classes: [xss, sqli, ssrf, path-traversal, prototype-pollution, cmd-injection, mass-assignment, auth-bypass, jwt-misuse, redos, idor, deser]
+  sinks:
+    - "eval/new Function/vm.runIn*/setTimeout(string)"
+    - "child_process exec/execSync/spawn with concat"
+    - "innerHTML/outerHTML/document.write/dangerouslySetInnerHTML"
+    - "fs.readFile/writeFile/path.join on user paths"
+    - "db.query/sequelize.query/knex.raw with concat"
+    - "fetch/axios/got/http.request on user URL; auth headers across redirects"
+    - "Object.assign/merge/lodash merge/zipObjectDeep/set on user objects (proto keys __proto__/constructor/prototype)"
+    - "RegExp/new RegExp or complex regex on user-controlled input (ReDoS/backtracking)"
+    - "jwt.verify with alg confusion/none or hardcoded secret"
+    - "unserialize/serialize-javascript eval paths"
+  sources:
+    - "req.params/query/body/headers/cookies/files"
+    - "websocket/socket.io messages, CLI args, env"
+
+typescript: *js
+tsx: *js
+
+go: &golang
+  classes: [cmd-injection, sqli, ssrf, path-traversal, template-injection, auth-bypass, race, crypto-misuse, deser, goroutine-leak-dos]
+  sinks:
+    - "exec.Command with user-influenced args"
+    - "db.Query/Exec with fmt.Sprintf concat"
+    - "http.Get/http.NewRequest on user URL"
+    - "os.Open/ioutil.ReadFile on user path"
+    - "template.HTML/template.JS bypassing escape"
+    - "jwt.Parse without alg pinning; crypto/tls InsecureSkipVerify"
+    - "gob/xml/json unmarshal into interface{} executed later"
+  sources:
+    - "http.Request form/headers/body, grpc messages"
+    - "os.Args, stdin, file reads on uploaded files"
+
+golang: *golang
+
+c: &c
+  classes: [buffer-overflow, heap-overflow, stack-overflow, uaf, double-free, format-string, integer-overflow, oob-read, oob-write, cmd-injection, path-traversal]
+  sinks:
+    - "strcpy/strcat/sprintf/gets/scanf/memcpy without bounds"
+    - "malloc/free mismatches, use-after-free patterns"
+    - "printf-family with user-controlled format"
+    - "system/popen/exec* with user args"
+    - "integer ops feeding allocation/index sizes"
+  sources:
+    - "argv/stdin, socket recv, file contents, env vars"
+    - "protocol parsers, file-format decoders"
+cpp: *c
+generic:
+  classes: [rce, sqli, ssrf, path-traversal, cmd-injection, auth-bypass, deser, xss, idor]
+  sinks: ["command exec, sql exec, file read/write, network fetch, deser, template render"]
+  sources: ["http request data, file uploads, cli args, stdin, sockets"]
+
+java:
+  classes: [deser, xxe, sqli, ssrf, path-traversal, cmd-injection, spel-injection, auth-bypass, idor]
+  sinks:
+    - "ObjectInputStream.readObject on untrusted bytes"
+    - "DocumentBuilderFactory/SAXParser without XXE hardening"
+    - "Statement.execute* with concat; Runtime.exec"
+    - "RestTemplate/HttpClient on user URL"
+    - "SpEL ExpressionParser on user input; sendRedirect"
+  sources:
+    - "servlet/Spring request params/body/headers"
+    - "message consumers, file uploads, CLI args"
+
+rust:
+  classes: [unsafe-memory, logic-auth-bypass, unwrap-dos, path-traversal, cmd-injection, deser]
+  sinks:
+    - "unsafe {} blocks: raw ptr deref, from_raw_parts, transmute"
+    - "unwrap/expect on untrusted-input-derived Result"
+    - "std::process::Command with user args; fs::read on user path"
+    - "bincode/pickle-like deserializers on untrusted data"
+  sources: ["http handlers, env::args, stdin, file reads"]
+
+ruby:
+  classes: [rce, sqli, cmd-injection, path-traversal, deser, mass-assignment, ssrf, xss, idor]
+  sinks:
+    - "eval/instance_eval/class_eval; system/backticks/KERNEL#exec"
+    - "Marshal.load/YAML.load on untrusted data"
+    - "find_by_sql/execute with concat; File.open on user path"
+    - "Net::HTTP/URI.open on user URL; params.permit! mass-assign"
+  sources: ["rails/sinatra params, request body/headers, uploads"]
+
+php:
+  classes: [rce, lfi, sqli, xss, cmd-injection, deser, ssrf, path-traversal, idor]
+  sinks:
+    - "eval/assert/create_function; system/exec/shell_exec/popen"
+    - "unserialize on untrusted data; include/require user path"
+    - "mysql_query/mysqli_query with concat; file_get_contents user URL/path"
+  sources: ["$_GET/$_POST/$_COOKIE/$_REQUEST, php://input, uploads"]
+
+csharp:
+  classes: [deser, sqli, ssrf, path-traversal, cmd-injection, xxe, auth-bypass]
+  sinks:
+    - "BinaryFormatter/SoapFormatter Deserialize; Process.Start"
+    - "SqlCommand with concat; File.Read* on user path"
+    - "XmlDocument/XmlSerializer without DTD limits; HttpClient user URL"
+  sources: ["controller params, request body, uploads"]
+
+kotlin:
+  classes: [deser, sqli, ssrf, cmd-injection, path-traversal, auth-bypass]
+  sinks:
+    - "Runtime.exec; Serialized input streams; raw SQL concat"
+    - "HttpURLConnection/client on user URL; File on user path"
+  sources: ["ktor/spring request data, intent extras"]
+
+swift:
+  classes: [cmd-injection, path-traversal, deser, ssrf]
+  sinks: ["Process launch, FileManager user paths, NSKeyedUnarchiver"]
+  sources: ["URL handlers, IPC, file drops"]
+
+lua:
+  classes: [rce, cmd-injection, path-traversal]
+  sinks: ["loadstring/load/dofile; os.execute/io.popen"]
+  sources: ["nginx/openresty request data, socket reads"]
+
+scala:
+  classes: [deser, sqli, ssrf, cmd-injection]
+  sinks: ["Java deserialize paths, sys.process, raw SQL"]
+  sources: ["http request data, kafka/queue messages"]

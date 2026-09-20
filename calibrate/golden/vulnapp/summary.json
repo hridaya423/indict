@@ -1,0 +1,22 @@
+{
+  "repo": "vulnapp",
+  "total": 7,
+  "live": 7,
+  "unreviewed": 0,
+  "verified": 4,
+  "dismissed": 0,
+  "by_severity": {
+    "high": 6,
+    "medium": 1
+  },
+  "by_engine": {
+    "hunter": 6,
+    "sweep": 1
+  },
+  "by_model": {
+    "local": 2,
+    "smoke": 4,
+    "": 1
+  },
+  "dismiss_reasons": {}
+}

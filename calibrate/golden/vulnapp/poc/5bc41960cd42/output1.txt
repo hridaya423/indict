@@ -1,0 +1,1 @@
+/poc/repro1.sh: line 12: warning: here-document at line 12 delimited by end-of-file (wanted `PY')

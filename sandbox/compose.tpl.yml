@@ -1,0 +1,21 @@
+# Template: bring a web-app target up locally so PoCs can hit it on localhost.
+# Copy to findings/<repo>/compose.yml, fill in build/run bits for the target.
+# Everything stays on localhost — no external probing, guardrails-compliant.
+services:
+  target:
+    build: .
+    # image: <upstream-image>          # or pull the project's published image
+    ports: ["127.0.0.1:8080:8080"]     # localhost only
+    environment:
+      - DEBUG=1                        # whatever the target needs to boot
+    # command: ["npm", "start"]        # if the image needs an entrypoint
+    restart: "no"
+
+  # PoC runner: one-off container that curls the target, then exits.
+  poc:
+    image: crs-sandbox-python
+    depends_on: [target]
+    network_mode: service:target       # shares localhost with target
+    volumes:
+      - ./poc:/poc:ro
+    command: ["bash", "/poc/repro.sh"]

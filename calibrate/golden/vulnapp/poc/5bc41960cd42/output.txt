@@ -1,0 +1,7 @@
+/poc/repro.sh: line 12: import: command not found
+/poc/repro.sh: line 13: import: command not found
+/poc/repro.sh: line 16: malicious_input: command not found
+/poc/repro.sh: line 16: name:: command not found
+/poc/repro.sh: line 16: password:: command not found
+/poc/repro.sh: line 19: syntax error near unexpected token `('
+/poc/repro.sh: line 19: `conn = sqlite3.connect(':memory:')'

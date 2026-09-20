@@ -1,0 +1,33 @@
+# Calibration ground truth: real projects at pre-CVE-fix refs.
+# expect.file_hint: regex-ish substring of the file holding the vuln
+# expect.classes: acceptable vuln_class matches for a "hit"
+
+- name: pyyaml-cve-2020-14343
+  repo: https://github.com/yaml/pyyaml
+  ref: 5.3.1            # unsafe deserialization via FullLoader; fixed in 5.4
+  lang: python
+  expect: {classes: [deser, deserialization, rce, afo], file_hint: "constructor|loader"}
+
+- name: minimist-cve-2021-44906
+  repo: https://github.com/minimistjs/minimist
+  ref: v1.2.5           # prototype pollution; fixed 1.2.6
+  lang: javascript
+  expect: {classes: [prototype-pollution, proto-pollution, other], file_hint: "index.js"}
+
+- name: lodash-cve-2020-8203
+  repo: https://github.com/lodash/lodash
+  ref: 4.17.15          # prototype pollution in zipObjectDeep; fixed 4.17.19
+  lang: javascript
+  expect: {classes: [prototype-pollution, proto-pollution, other], file_hint: "lodash"}
+
+- name: requests-cve-2023-32681
+  repo: https://github.com/psf/requests
+  ref: v2.30.0          # Proxy-Authorization leaked on redirects; fixed v2.31.0
+  lang: python
+  expect: {classes: [credential-leak, auth-bypass, ssrf, other], file_hint: "sessions.py"}
+
+- name: moment-cve-2022-31129
+  repo: https://github.com/moment/moment
+  ref: 2.29.3           # ReDoS in RFC2822 parsing; fixed 2.29.4
+  lang: javascript
+  expect: {classes: [redos, other], file_hint: "moment.js"}
