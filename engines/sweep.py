@@ -8,8 +8,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from crs.rank import SKIP_DIRS
-from crs.store import Finding
+from indictment.rank import SKIP_DIRS
+from indictment.store import Finding
 from .hunter import _norm_class
 
 # vendored registry packs (rules/) — refresh with:
@@ -17,6 +17,11 @@ from .hunter import _norm_class
 # local files keep sweep working with zero network on event day
 _RULES = Path(__file__).resolve().parent.parent / "rules"
 SEMGREP_CONFIGS = [str(p) for p in sorted(_RULES.glob("*.yaml"))]
+# learned rules — distilled from verified findings (indictment/learn.py) after
+# mechanically re-hitting the known-bad line. INDICT_NO_LEARNED opts out.
+_LEARNED = ([] if os.environ.get("INDICT_NO_LEARNED")
+            else [str(p) for p in sorted((_RULES / "learned").glob("*.yaml"))])
+SEMGREP_CONFIGS += _LEARNED
 
 
 def _skippable(rel: str) -> bool:
@@ -106,6 +111,9 @@ def _run(cmd: list[str], cwd: Path, timeout: int = 300) -> dict:
 def run(root: Path, langs: list[str], **kw) -> list[Finding]:
     out: list[Finding] = []
     if which("semgrep"):
+        if _LEARNED:
+            print(f"[sweep] {len(_LEARNED)} learned rules active",
+                  flush=True)
         cfg = sum([["--config", c] for c in SEMGREP_CONFIGS], [])
         data = _run(["semgrep", "scan", *cfg, "--json", "--quiet",
                      "--timeout", "60", "--no-git-ignore"], root)

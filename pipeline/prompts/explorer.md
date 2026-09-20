@@ -8,9 +8,15 @@ Method (RepoAudit-style):
 Reply with ONE JSON object:
 ```json
 {{"reachable": true,
-  "path": ["source: file:line", "hop: file:line", "sink: file:line"],
+  "path": [{{"file": "src/app.py", "line": 42, "hop": "source",
+            "note": "request param enters"}},
+           {{"file": "src/db.py", "line": 7, "hop": "sink",
+            "note": "reaches cursor.execute"}}],
   "blockers": ["sanitizers/guards found on the path, if any"],
   "vuln_class": "...",
   "notes": "..."}}
 ```
-`reachable` must be false if any guard on the real path blocks attacker data.
+
+- `path` entries are ordered source → sink. `hop` is one of: `source`, `hop`, `sink`.
+- Every entry names a real file and line you have seen or resolved — the validator reads each hop's code. A prose-only hop fails validation.
+- `reachable` must be false if any guard on the real path blocks attacker data.

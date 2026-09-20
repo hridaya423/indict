@@ -42,7 +42,7 @@ the sandbox, not the model. That's the whole point.
 ## 3. If there's time / a target is provided (2-5 min)
 
 ```bash
-./scan <repo-url> --frontier --hunt-budget 10
+./indict <repo-url> --frontier --hunt-budget 10
 ```
 
 - progress streams per engine (`[hunter/local] +N candidates`)
@@ -68,11 +68,11 @@ the sandbox, not the model. That's the whole point.
 | Frontier endpoint down | `--models local` (qwen3-30b) or the smoke models — pipeline is identical |
 | Only 60 seconds | `bash tests/verify.sh` — selfcheck + scoreboard + doctor in one command |
 
-## Unified-system arc (CRS-OPS — replaces the funnel-only arc)
+## Unified-system arc (INDICT — replaces the funnel-only arc)
 
-1. `./scan --status` — the estate: repos watched, last commit scanned,
+1. `./indict --status` — the estate: repos watched, last commit scanned,
    verified counts. One screen = "continuous scanning system".
-2. Split terminal: `./scan --watch` running live.
+2. Split terminal: `./indict --watch` running live.
 3. Push a bad commit to a watched repo → within one cycle: rescan →
    `[alert]` fires on screen + alerts.jsonl. "Monitoring" demoed.
 4. `bash demo/snare-chain.sh` — snare boots as a real service; crafted
@@ -84,18 +84,36 @@ the sandbox, not the model. That's the whole point.
 The pitch line: "One system, three tracks: it watches, it proves, it
 alerts — and the proof is machine-checked down to the line."
 
+## Board arc (the visible system — prepend to the live proof)
+
+0. `./indict --board &` — open http://127.0.0.1:8404. Estate strip shows
+   repos + verified/dismissed/alerts totals; ● LIVE pulses while a scan runs.
+1. Kick a scan (`./indict <repo> --models local` or replay demo.sh) — the
+   Pipeline ledger fills live: `sweep +41`, `hunter/ds +12`,
+   `adjudicate kept 18 / dismissed 23`, then falsify kill rows with the
+   actual reasons, then `poc VERIFIED …` one row per proof.
+2. Click a verified card → the case file expands inline: narrative
+   (27B-written), evidence chain, PoC artifacts, reproduce command.
+3. Click a dismissed row → "the falsifier killed it — here's the concrete
+   evidence" in plain English. Hallucination control, demonstrated.
+4. `./indict --pack <repo> <id>` — hand a judge the tarball;
+   `RUN.sh /path/to/repo` replays the PoC and self-verifies the signal.
+5. Tail stages surface in the ledger: `learn indictment.learned.a91f → rules/`
+   (the scanner just got smarter) and `chain ssrf+cred-leak → RCE`
+   (composability, proven).
+
 ## Closed-loop arc (the full SOC story — extends the above)
 
 5. The page: with Twilio env set, a critical verified finding fires
    SMS + voice call; without creds every channel still records to
    `alerts-outbox.jsonl` (show the sim lines — honest demo).
-6. `./scan --issue vulnapp --file` — the 4B drafts a responsible-
-   disclosure issue, secret-redacted, filed to CRS_ISSUE_REPO.
+6. `./indict --issue vulnapp --file` — the 27B drafts a responsible-
+   disclosure issue, secret-redacted, filed to INDICT_ISSUE_REPO.
    (Without creds: same drafts printed, recorded as dry runs.)
-7. `./scan --explain vulnapp <id>` — the case file: who proposed it,
+7. `./indict --explain vulnapp <id>` — the case file: who proposed it,
    what the falsifier checked, the sandbox trace, the alert timeline.
-8. `./scan --fix vulnapp <id>` — the agent (codex/devin-acp/any CLI via
-   CRS_FIXER) patches in an isolated worktree; the GATE then decides:
+8. `./indict --fix vulnapp <id>` — the agent (codex/devin-acp/any CLI via
+   INDICT_FIXER) patches in an isolated worktree; the GATE then decides:
    the recorded PoC must die on patched code AND the patch's own diff
    rescans clean. `fix-verified` pages out + comments on the issue.
    "The model proposes the patch — the funnel grades it. AI fixes AI

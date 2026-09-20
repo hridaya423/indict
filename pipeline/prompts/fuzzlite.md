@@ -10,4 +10,4 @@ Write a bash script (runner.sh) that runs INSIDE a docker sandbox with the repo 
 2. Feed it 5-20 seed inputs you generate (valid-ish and malformed variants)
 3. Print crash evidence: sanitizer output, panics, "CRASH:" markers with the offending input base64-encoded
 
-Output ONLY the bash script. Assume the image has the language toolchain only — no repo deps installed; keep the harness self-contained or use the repo's own source directly.
+Output ONLY the bash script, starting with `#!/bin/bash` — no prose, no markdown fences. Assume the image has the language toolchain only — no repo deps installed; keep the harness self-contained or use the repo's own source directly.

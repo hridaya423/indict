@@ -1,4 +1,4 @@
-"""Cross-location semantic dedup tests (crs/consensus.py + crs/sie.py).
+"""Cross-location semantic dedup tests (indictment/consensus.py + indictment/sie.py).
 Run: uv run python tests/test_dedup_semantic.py"""
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs import consensus, sie
-from crs.store import Finding
+from indictment import consensus, sie
+from indictment.store import Finding
 
 DETAIL_A = ("User-supplied search term flows from the request handler into "
             "a string concatenation passed straight to cursor.execute, so an "

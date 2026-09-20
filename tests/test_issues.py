@@ -1,4 +1,4 @@
-"""Issue filing: 4B draft parse, secret redaction, dry-run contract.
+"""Issue filing: draft JSON parse, secret redaction, dry-run contract.
 Nothing live — fake client, no GITHUB_TOKEN, tmp dirs only."""
 import json
 import os
@@ -7,12 +7,12 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-for k in ("GITHUB_TOKEN", "CRS_ISSUE_REPO"):
+for k in ("GITHUB_TOKEN", "INDICT_ISSUE_REPO"):
     os.environ.pop(k, None)
 
-from crs import issues
-from crs.llms import Reply
-from crs.store import Finding, dump, load
+from indictment import issues
+from indictment.llms import Reply
+from indictment.store import Finding, dump, load
 
 
 class FakeClient:

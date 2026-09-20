@@ -10,10 +10,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs.llms import Reply
-from crs.resolver import Resolver
-from crs.store import Finding
-from crs import consensus, adjudicate, poc
+from indictment.llms import Reply
+from indictment.resolver import Resolver
+from indictment.store import Finding
+from indictment import consensus, adjudicate, poc
 
 
 class StubClient:

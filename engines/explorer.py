@@ -9,10 +9,10 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from crs.llms import Client
-from crs.resolver import Resolver
-from crs.store import Finding
-from crs.util import prompt
+from indictment.llms import Client
+from indictment.resolver import Resolver
+from indictment.store import Finding
+from indictment.util import prompt
 from .agent_loop import run_agent
 from .hunter import _norm_class
 
@@ -61,18 +61,44 @@ def explore_one(client: Client, resolver: Resolver, root: Path,
                     deadline=deadline)
     if not isinstance(res.parsed, dict):
         return []
-    path = res.parsed.get("path") or []
-    if not res.parsed.get("reachable") or not path:
+    raw_path = res.parsed.get("path") or []
+    if not res.parsed.get("reachable") or not raw_path:
         return []
-    chain = " -> ".join(str(p) for p in path)
-    src = path[0] if isinstance(path[0], dict) else {}
-    src_file, src_line = str(src.get("file", seed["file"])), int(src.get("line", 0) or 0)
+    # hops are {file, line, hop, note} objects; tolerate "file:line" strings
+    # from models that ignored the schema
+    hops = []
+    for p in raw_path:
+        if isinstance(p, dict):
+            hops.append({"file": str(p.get("file") or ""),
+                         "line": int(p.get("line") or 0),
+                         "note": str(p.get("note") or p.get("hop") or "")})
+        else:
+            m = re.search(r"([\w./-]+\.\w+):(\d+)", str(p))
+            hops.append({"file": m.group(1), "line": int(m.group(2)),
+                         "note": str(p)} if m
+                        else {"file": "", "line": 0, "note": str(p)})
+    chain = " -> ".join(f"{h['file']}:{h['line']}" if h["file"]
+                       else h["note"] for h in hops)
+    # the validator reads every hop's code, not just the sink's — a claimed
+    # path it can't see is unverifiable, which is the point
+    windows = [f"--- sink site {seed['file']}:{seed['line']} ---\n{code}"]
+    seen = {(seed["file"], seed["line"] // 80)}
+    for h in hops:
+        if len(windows) >= 4 or not h["file"]:
+            break
+        key = (h["file"], h["line"] // 80)
+        if key in seen:
+            continue
+        seen.add(key)
+        w = resolver.window(h["file"], h["line"] or 1, pad=40)
+        if w:
+            windows.append(f"--- hop {h['file']}:{h['line']} ---\n{w}")
     v = client.chat("triage", [
         {"role": "system", "content":
          "You are a strict validator. Kill weak claims."},
         {"role": "user", "content": prompt("validator",
             chain=chain, sink=seed["sink"],
-            code=code + "\n\n" + resolver.window(src_file, src_line))}],
+            code="\n\n".join(windows))}],
         expect_json=True, prefer=[model] if model else None)
     pv = v.parsed or {}
     if pv.get("verdict") != "PASS":
@@ -85,7 +111,9 @@ def explore_one(client: Client, resolver: Resolver, root: Path,
         severity=pv.get("severity", "high") if pv.get("severity") in SEVERITY else "high",
         confidence=min(0.85, float(pv.get("confidence", 0.7))),
         title=pv.get("title", f"taint path to {seed['sink']}")[:200],
-        detail=f"data-flow path: {chain}"[:3000],
+        detail=("data-flow path: " + chain + "\n" +
+                "\n".join(f"  {h['file']}:{h['line']} — {h['note']}"
+                          for h in hops if h["note"]))[:3000],
         poc=pv.get("poc_idea", "")[:1500], tags=["validated-path"])]
 
 

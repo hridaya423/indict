@@ -7,10 +7,10 @@ import re
 import time
 from pathlib import Path
 
-from crs.llms import Client
-from crs.resolver import Resolver
-from crs.store import Finding
-from crs.util import git, prompt
+from indictment.llms import Client
+from indictment.resolver import Resolver
+from indictment.store import Finding
+from indictment.util import git, prompt
 from .agent_loop import run_agent
 from .hunter import _norm_class, _norm_sev
 

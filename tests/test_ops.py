@@ -14,10 +14,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs import alerts, state, watch                    # noqa: E402
-from crs.main import status as main_status             # noqa: E402
-from crs.pipeline import run as pipeline_run          # noqa: E402
-from crs.store import Finding, dump as store_dump      # noqa: E402
+from indictment import alerts, state, watch                    # noqa: E402
+from indictment.main import status as main_status             # noqa: E402
+from indictment.pipeline import run as pipeline_run          # noqa: E402
+from indictment.store import Finding, dump as store_dump      # noqa: E402
 
 
 def _git(cwd: Path, *args: str) -> None:
@@ -60,7 +60,7 @@ def t_state(tmp: Path) -> None:
 
 
 def t_alerts(tmp: Path) -> None:
-    os.environ.pop("CRS_ALERT_WEBHOOK", None)   # webhook path stays skipped
+    os.environ.pop("INDICT_ALERT_WEBHOOK", None)   # webhook path stays skipped
     f = Finding(engine="t", file="a.py", line=3, vuln_class="dep-cve",
                 severity="high", status="verified", title="CVE-1 in foo")
     alerts.emit("testrepo", f, "new-verified", out_root=tmp)
@@ -131,7 +131,8 @@ def t_watch(tmp: Path) -> None:
              if l.strip()]
     assert lines, "watch cycle raised no alerts"
     kinds = {json.loads(l)["kind"] for l in lines}
-    assert kinds <= {"new-verified", "new-adjudicated"} and kinds, kinds
+    assert kinds <= {"new-verified", "new-adjudicated", "new-candidate"} \
+        and kinds, kinds
     print(f"PASS watch: new commit -> differential rescan, "
           f"{len(lines)} alert(s), state head advanced")
 

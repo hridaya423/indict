@@ -13,7 +13,7 @@ services:
 
   # PoC runner: one-off container that curls the target, then exits.
   poc:
-    image: crs-sandbox-python
+    image: indictment-sandbox-python
     depends_on: [target]
     network_mode: service:target       # shares localhost with target
     volumes:

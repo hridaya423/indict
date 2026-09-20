@@ -1,0 +1,11 @@
+rules:
+- id: indictment.learned.94aa5fa4e35f
+  severity: ERROR
+  message: user input reaches eval()
+  languages:
+  - javascript
+  mode: taint
+  pattern-sources:
+  - pattern: $OBJ.get($ARG)
+  pattern-sinks:
+  - pattern: eval($X)

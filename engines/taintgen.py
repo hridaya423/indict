@@ -12,9 +12,9 @@ import subprocess
 import time
 from pathlib import Path
 
-from crs.llms import Client
-from crs.store import Finding
-from crs.util import prompt
+from indictment.llms import Client
+from indictment.store import Finding
+from indictment.util import prompt
 from .hunter import _norm_class
 
 
@@ -60,11 +60,8 @@ def _gen_and_scan(root: Path, lang: str, client: Client, recon: dict,
         if rules_yaml.lstrip().startswith("yaml"):
             rules_yaml = rules_yaml.lstrip()[4:]
         rules_yaml = rules_yaml.strip()
-    rdir = out_dir / "rules"
-    rdir.mkdir(parents=True, exist_ok=True)
-    (rdir / f"generated.{lang}.yml").write_text(rules_yaml)
-    ldir = rdir / lang
-    ldir.mkdir(exist_ok=True)
+    ldir = out_dir / "rules" / lang
+    ldir.mkdir(parents=True, exist_ok=True)
     (ldir / "rules.yml").write_text(rules_yaml)
     chk = subprocess.run(["semgrep", "--validate", "--config", str(ldir)],
                          capture_output=True, text=True, timeout=60)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """OpenAI-compatible /v1/chat/completions -> `devin acp` bridge.
 
-Lets the CRS harness treat Devin (SWE-2-Max) as an endpoint. One fresh
+Lets the Indict harness treat Devin (SWE-2-Max) as an endpoint. One fresh
 `devin acp` child per request: initialize -> authenticate (windsurf_api_key
 from ~/.local/share/devin/credentials.toml) -> session/new -> set "ask"
 mode (text answers, no tool execution) -> session/prompt -> collect
@@ -11,6 +11,7 @@ Usage: ./devin_acp_shim.py [port]   (default 8319)
 """
 import json
 import os
+import queue
 import subprocess
 import sys
 import threading
@@ -51,6 +52,31 @@ class ACP:
         self.p = spawn(model_args)
         self.nid = 0
         self.lock = threading.Lock()
+        # blocking readline() inside a `while < timeout` loop hangs forever
+        # on a silent process — the deadline only ticks between lines. Pump
+        # stdout on a daemon thread so every read carries a real deadline.
+        self.q: queue.Queue = queue.Queue()
+
+        def _pump():
+            try:
+                for line in self.p.stdout:
+                    self.q.put(line)
+            except Exception:
+                pass
+            self.q.put(None)                     # EOF sentinel
+
+        threading.Thread(target=_pump, daemon=True).start()
+
+    def _line(self, timeout: float):
+        """One stdout line with a hard deadline. None = EOF, raises on
+        timeout."""
+        try:
+            line = self.q.get(timeout=timeout)
+        except queue.Empty:
+            raise TimeoutError("acp read timed out")
+        if line is None:
+            raise RuntimeError("acp stdout closed")
+        return line
 
     def call(self, method, params, sink=None, timeout=60):
         with self.lock:
@@ -61,24 +87,23 @@ class ACP:
                  "params": params}) + "\n")
             self.p.stdin.flush()
         t0 = time.time()
-        while time.time() - t0 < timeout:
-            line = self.p.stdout.readline()
-            if not line:
-                raise RuntimeError("acp stdout closed")
-            m = json.loads(line)
+        while True:
+            left = timeout - (time.time() - t0)
+            if left <= 0:
+                raise TimeoutError(f"{method} timed out")
+            m = json.loads(self._line(left))
             if sink is not None:
                 sink.append(m)
             if m.get("id") == rid:
                 if "error" in m:
                     raise RuntimeError(f"{method}: {m['error'].get('message')}")
                 return m.get("result", {})
-        raise TimeoutError(f"{method} timed out")
 
 
 def handshake(model_args) -> ACP:
     a = ACP(model_args)
     a.call("initialize", {"protocolVersion": 1, "clientCapabilities": {},
-                          "clientInfo": {"name": "crs-shim", "version": "1"}})
+                          "clientInfo": {"name": "indictment-shim", "version": "1"}})
     a.call("authenticate", {"methodId": "devin-browser",
                             "_meta": {"api_key": api_key()}})
     return a
@@ -116,8 +141,39 @@ def flatten(messages) -> str:
     return "\n".join(parts)
 
 
+# Warm pool: each `devin acp` spawn pays ~seconds for CLI init + auth +
+# session DB + MCP startup, and the harness makes one HTTP call per agent
+# iteration — so keep handshake'd processes around and give each request a
+# fresh session on a pooled process. A process is exclusive to one request
+# at a time (acquire/release); PROC_MAX_USES bounds session-table leaks.
+POOL_MAX = int(os.environ.get("INDICT_SHIM_POOL", "8"))
+PROC_MAX_USES = 50
+_pool: list = []
+_pool_lock = threading.Lock()
+
+
+def acquire() -> ACP:
+    with _pool_lock:
+        if _pool:
+            return _pool.pop()
+    return handshake(detect_model())  # over-commit when pool is empty
+
+
+def release(a: ACP, healthy: bool) -> None:
+    a.uses = getattr(a, "uses", 0) + 1
+    if not healthy or a.uses >= PROC_MAX_USES:
+        a.p.kill()
+        return
+    with _pool_lock:
+        if len(_pool) < POOL_MAX:
+            _pool.append(a)
+            return
+    a.p.kill()
+
+
 def chat(messages) -> str:
-    a = handshake(detect_model())
+    a = acquire()
+    healthy = False
     try:
         sid = a.call("session/new",
                      {"cwd": str(CWD), "mcpServers": []})["sessionId"]
@@ -126,8 +182,8 @@ def chat(messages) -> str:
         except Exception:
             pass  # older ACP: default mode still answers text
         chunks = []
-        rid_sink = []
         t0 = time.time()
+        done = False
         with a.lock:
             a.nid += 1
             rid = a.nid
@@ -136,14 +192,21 @@ def chat(messages) -> str:
                  "params": {"sessionId": sid, "prompt": [
                      {"type": "text", "text": flatten(messages)}]}}) + "\n")
             a.p.stdin.flush()
-        while time.time() - t0 < REQ_TIMEOUT:
-            line = a.p.stdout.readline()
-            if not line:
+        while True:
+            left = REQ_TIMEOUT - (time.time() - t0)
+            if left <= 0:
+                break
+            try:
+                line = a._line(left)
+            except (TimeoutError, RuntimeError):
                 break
             m = json.loads(line)
             if m.get("method") == "session/update":
                 u = m["params"].get("update", {})
-                if u.get("sessionUpdate") == "agent_message_chunk":
+                # only collect chunks for THIS session — a warm process can
+                # still have trailing notifications from a previous one
+                if (u.get("sessionUpdate") == "agent_message_chunk"
+                        and m["params"].get("sessionId") == sid):
                     c = u.get("content", {})
                     chunks.append(c.get("text", "") if isinstance(c, dict)
                                   else str(c))
@@ -156,10 +219,18 @@ def chat(messages) -> str:
                                    "message": "shim: tools disabled"}}) + "\n")
                     a.p.stdin.flush()
             elif m.get("id") == rid:
+                done = True
                 break
+        try:
+            a.call("session/delete", {"sessionId": sid}, timeout=15)
+        except Exception:
+            pass  # proc is recycled via PROC_MAX_USES regardless
+        # a proc that wedged mid-prompt never re-enters the pool — it gets
+        # killed here and the next acquire() handshakes a fresh one
+        healthy = done
         return "".join(chunks)
     finally:
-        a.p.kill()
+        release(a, healthy)
 
 
 class H(BaseHTTPRequestHandler):

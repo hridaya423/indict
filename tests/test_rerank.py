@@ -8,8 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs import sie                                    # noqa: E402
-from crs.store import Finding                         # noqa: E402
+from indictment import sie                                    # noqa: E402
+from indictment.store import Finding                         # noqa: E402
 
 
 class _Resp:
@@ -64,7 +64,7 @@ def t_rerank_off() -> None:
 def t_poc_ordering() -> None:
     """The poc.py gate: >cap candidates + live reranker = cross-encoder
     order; <=cap or no reranker = severity/confidence order."""
-    # simulate the exact ordering logic from crs.poc.prove
+    # simulate the exact ordering logic from indictment.poc.prove
     def order(findings, cap, scores=None):
         todo = sorted(findings,
                       key=lambda f: ({"critical": 0, "high": 1}.get(f.severity, 2),

@@ -1,4 +1,4 @@
-# auto-imported by python at startup. When CRS_TRACE=1, records every
+# auto-imported by python at startup. When INDICT_TRACE=1, records every
 # executed (file, line) under /src and dumps /poc/trace.json at exit —
 # the PoC stage checks the reported vuln line actually executed.
 import atexit
@@ -16,7 +16,7 @@ def _dump():
 
 
 _seen = set()
-if os.environ.get("CRS_TRACE") == "1":
+if os.environ.get("INDICT_TRACE") == "1":
     def _tr(frame, event, arg):
         fn = frame.f_code.co_filename
         if not fn.startswith("/src/"):

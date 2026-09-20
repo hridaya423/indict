@@ -4,6 +4,8 @@
 
 ```bash
 bash tests/verify.sh        # selfcheck + scoreboard + doctor: expect READY
+# calibration sweeps stay pristine — learned rules are global by design:
+INDICT_NO_LEARNED=1 ./indict <calibration-target> --no-llm   # if rescanning
 ```
 
 - keys in `.env`? (DEEPSEEK_API_KEY / ZAI_API_KEY — open-weight, rules-compliant)
@@ -15,14 +17,14 @@ bash tests/verify.sh        # selfcheck + scoreboard + doctor: expect READY
 Scan all three, sequential, bounded. One command each:
 
 ```bash
-./scan <target-1-url> --frontier --open-only --hunt-budget 60 --engines sweep,hunter,explorer,taintgen,variant,fuzzlite
+./indict <target-1-url> --frontier --open-only --hunt-budget 60 --engines sweep,hunter,explorer,taintgen,variant,fuzzlite
 ```
 
 - `--open-only` = mechanical proof every model is open-weight (judge-visible)
 - `--hunt-budget 60` = each target capped at an hour; 3 targets < 4h, leaves triage time
 - while target N grinds: **person 2 triages** findings/<target-N-1>/ (read REPORT.md,
   kill weak findings by re-running their reproduce cmds, strengthen the good ones)
-- crash/power loss: `./scan <target> --resume` — keeps candidates, hunts only
+- crash/power loss: `./indict <target> --resume` — keeps candidates, hunts only
   uncovered files; verified findings always survive
 
 ## 12:30-17:00 — iterate
@@ -58,13 +60,13 @@ Scan all three, sequential, bounded. One command each:
 
 ## Superlinked SIE endpoint (likely day-of option)
 
-Most capable model in their catalog: **Qwen/Qwen3.6-27B** (Apache-2.0).
+Most capable model in their catalog: **Qwen/Qwen3.8-27B-FP8** (Apache-2.0).
 Already wired into models.yaml as `sie` — drop the key in `.env`
 (SIE_API_KEY=...), then:
 
 ```bash
-CRS_MAX_TOKENS=4096 CRS_MAX_FILE_LINES=400 \
-  ./scan <target> --models sie --open-only
+INDICT_MAX_TOKENS=4096 INDICT_MAX_FILE_LINES=400 \
+  ./indict <target> --models sie --open-only
 ```
 
 Why the tuned env: SIE serves it with **8k context / 4k output** — our
@@ -92,22 +94,22 @@ specify first-wins vs shared credit on duplicates — so win either way:
 4. SYSTEM score is fully differentiated — demo the dismissal of a
    hallucination as a feature.
 
-## The unified system (CRS-OPS) — pitch-day commands
+## The unified system (INDICT) — pitch-day commands
 
 Three tracks, one loop: watch (continuous scanning) → funnel → alerts
 (monitoring) → service probes (pen-test). All committed.
 
 ```bash
 # estate at a glance — every repo, last commit scanned, verified counts
-./scan --status
+./indict --status
 
 # continuous mode: registry-driven rescan on every new commit, alerts
-# on new findings (file + terminal + CRS_ALERT_WEBHOOK if set)
+# on new findings (file + terminal + INDICT_ALERT_WEBHOOK if set)
 cp watch.yaml.example watch.yaml   # then edit: the 4 target repos
-./scan --watch                     # Ctrl-C to stop; CRS_WATCH_INTERVAL=120
+./indict --watch                     # Ctrl-C to stop; INDICT_WATCH_INTERVAL=120
 
 # single-cycle check (rehearsal / CI)
-./scan --watch-once
+./indict --watch-once
 
 # live pen-test demo: snare as a real service, crafted webhooks,
 # HMAC gate discrimination + command-execution side effect

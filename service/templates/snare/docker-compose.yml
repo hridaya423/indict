@@ -1,10 +1,10 @@
-# snare service template — image pre-built by crs.service.template_boot
-# (docker build -f <template>/Dockerfile -t crs-svc-<name> <clone>).
+# snare service template — image pre-built by indictment.service.template_boot
+# (docker build -f <template>/Dockerfile -t indictment-svc-<name> <clone>).
 # Localhost-only port binding: the world can't reach the target. Probes
 # join the compose network and address the service by name (http://target).
 services:
   target:
-    image: crs-svc-__NAME__
+    image: indictment-svc-__NAME__
     ports: ["127.0.0.1:8011:8011"]
     volumes:
       - PLACEHOLDER_SHARED:/shared

@@ -5,7 +5,7 @@ set -e
 cd "$(dirname "$0")/images"
 for f in Dockerfile.*; do
   lang="${f#Dockerfile.}"
-  echo "==> crs-sandbox-$lang"
-  docker build -q -f "$f" -t "crs-sandbox-$lang" .
+  echo "==> indictment-sandbox-$lang"
+  docker build -q -f "$f" -t "indictment-sandbox-$lang" .
 done
-docker images | grep crs-sandbox
+docker images | grep indictment-sandbox

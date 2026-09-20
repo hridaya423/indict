@@ -27,23 +27,15 @@ models:
   # Superlinked SIE Cloud — most capable model in their catalog (Apache-2.0).
   # Catalog renamed it 3.6 -> 3.8-FP8; :*-256k profiles exist but return
   # "route unavailable" — base deployment serves 8k ctx / 4k max output:
-  #   CRS_MAX_TOKENS=4096 CRS_MAX_FILE_LINES=400
+  #   INDICT_MAX_TOKENS=4096 INDICT_MAX_FILE_LINES=400
   # (no --frontier; the agent loop's context-requests carry the depth)
   - name: sie
     base_url: https://api.superlinked.com/v1
     model: Qwen/Qwen3.8-27B-FP8
     api_key_env: SIE_API_KEY
     open_weight: true
-    roles: [hunt, triage, poc]
-
-  # small tier on the same endpoint — issue drafting / cheap summaries.
-  # kept out of hunt roles so it never gets picked for real reasoning.
-  - name: sie-small
-    base_url: https://api.superlinked.com/v1
-    model: Qwen/Qwen3.5-4B
-    api_key_env: SIE_API_KEY
-    open_weight: true
-    roles: [draft]
+    roles: [hunt, triage, poc, draft]  # biggest model in the catalog does
+                                      # drafting too — no small tier
 
   - name: lmstudio
     base_url: http://localhost:1234/v1
@@ -57,16 +49,18 @@ models:
     model: qwen2.5-coder:1.5b  # tiny coder model — harness smoke + calibration
     api_key_env: ""
     open_weight: true
+    roles: [cheap]             # never a silent hunt/triage/poc fallback
 
   - name: smoke2
     base_url: http://localhost:11434/v1
     model: qwen2.5-coder:0.5b  # second local model — exercises consensus pooling
     api_key_env: ""
     open_weight: true
+    roles: [cheap]
 
   - name: vibeproxy
     base_url: http://localhost:8317/v1
     model: auto               # fronts Claude Code / Codex subscription
     api_key_env: ""
-    open_weight: false        # NOT for CRS inference if rules say open-only
+    open_weight: false        # NOT for Indict inference if rules say open-only
     roles: [hunt, triage, poc]

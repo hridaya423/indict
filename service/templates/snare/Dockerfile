@@ -1,7 +1,7 @@
 # Self-contained: build context is the snare clone; the wrapper script
 # and config are inlined (printf) so nothing outside the context is
 # COPYed. Built via: docker build -f service/templates/snare/Dockerfile \
-#   -t crs-svc-snare targets/snare
+#   -t indictment-svc-snare targets/snare
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./

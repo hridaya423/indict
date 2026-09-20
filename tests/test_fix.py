@@ -9,8 +9,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs import fix
-from crs.store import Finding, dump
+from indictment import fix
+from indictment.store import Finding, dump
 
 
 def mkrepo(td: Path):
@@ -111,6 +111,53 @@ def main():
                                     rescan=lambda: None)
         assert verdict == "fix-rejected" and "introduces" in reason
         print("PASS gate: dirty patch -> fix-rejected")
+
+        # baseline subtraction: rescan re-surfacing a PRE-EXISTING finding
+        # (same file+class, drifted line) must not reject the patch — the
+        # old gate auto-rejected on any scanner noise in the repo
+        prior = fixdir.parent.parent / "findings.jsonl"
+        dump(prior, [f, Finding(engine="sweep", file="app.py", line=1,
+                                vuln_class="credential-leak", status="candidate",
+                                title="pre-existing key")])
+        wt5, base5 = fix._worktree(root, fixdir / "fifth")
+        (wt5 / "app.py").write_text("def main():\n    pass\n")
+        stale = fixdir / "fifth" / "scan" / "wt"
+        stale.mkdir(parents=True)
+        dump(stale / "findings.jsonl",
+             [Finding(engine="sweep", file="app.py", line=2,  # drifted ±1
+                      vuln_class="credential-leak", status="candidate",
+                      title="same pre-existing key")])
+        verdict, reason = fix._gate(root, wt5, base5, fixdir / "fifth", f, pdir,
+                                    run_poc=poc_dead,
+                                    rescan=lambda: None)
+        assert verdict == "fix-verified", (verdict, reason)
+        print("PASS gate: pre-existing finding subtracted -> fix-verified")
+
+        # a rescan hit in a file the patch never touched is also ignored —
+        # only the diff's own files can convict it
+        wt6, base6 = fix._worktree(root, fixdir / "sixth")
+        (wt6 / "app.py").write_text("def main():\n    pass\n")
+        stray = fixdir / "sixth" / "scan" / "wt"
+        stray.mkdir(parents=True)
+        dump(stray / "findings.jsonl",
+             [Finding(engine="sweep", file="other.py", line=9,
+                      vuln_class="sqli", status="candidate",
+                      title="unrelated")])
+        verdict, reason = fix._gate(root, wt6, base6, fixdir / "sixth", f, pdir,
+                                    run_poc=poc_dead,
+                                    rescan=lambda: None)
+        assert verdict == "fix-verified", (verdict, reason)
+        print("PASS gate: untouched-file finding ignored -> fix-verified")
+
+        # rescan itself blowing up is "unverifiable", not a silent reject
+        def boom():
+            raise RuntimeError("rescan exploded")
+        wt7, base7 = fix._worktree(root, fixdir / "seventh")
+        (wt7 / "app.py").write_text("def main():\n    pass\n")
+        verdict, reason = fix._gate(root, wt7, base7, fixdir / "seventh",
+                                    f, pdir, run_poc=poc_dead, rescan=boom)
+        assert verdict == "fix-unverifiable", (verdict, reason)
+        print("PASS gate: rescan crash -> fix-unverifiable (not reject)")
 
     print("FIX TESTS OK")
 

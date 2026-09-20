@@ -12,9 +12,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from crs.llms import Client, _parse_json
-from crs.resolver import Resolver
-from crs.util import context_requests
+from indictment.llms import Client, _parse_json
+from indictment.resolver import Resolver
+from indictment.util import context_requests
 
 
 @dataclass
@@ -29,7 +29,7 @@ def run_agent(client: Client, resolver: Resolver, root: Path,
               max_iters: int = 0, prefer: list[str] | None = None,
               deadline: float | None = None) -> AgentResult:
     if not max_iters:
-        max_iters = int(os.environ.get("CRS_MAX_ITERS", "8"))
+        max_iters = int(os.environ.get("INDICT_MAX_ITERS", "8"))
     convo = [{"role": "system", "content": system},
              {"role": "user", "content": user}]
     model = "unknown"
@@ -63,21 +63,49 @@ def run_agent(client: Client, resolver: Resolver, root: Path,
         return AgentResult(parsed=None, model=model, turns=max_iters)
 
 
+def _clip(s, cap_lines: int) -> str:
+    """A 2000-line def would flood an 8k context — serve the head and tell
+    the model how to pull the rest."""
+    lines = s.text.splitlines()
+    if len(lines) <= cap_lines:
+        return s.fmt()
+    return (f"### {s.file}:{s.start}-{s.end} [first {cap_lines} of "
+            f"{len(lines)} lines]\n" + "\n".join(lines[:cap_lines]) +
+            f"\n... [{len(lines) - cap_lines} more lines — request "
+            f"<file>{s.file}</file><line>{s.start + cap_lines}</line> "
+            "for the rest]")
+
+
 def _serve(resolver: Resolver, root: Path, reqs: list[dict]) -> str:
-    cap = int(os.environ.get("CRS_MAX_REQS", "4"))
+    cap = int(os.environ.get("INDICT_MAX_REQS", "4"))
+    cap_lines = int(os.environ.get("INDICT_SNIP_LINES", "120"))
     parts = []
     for r in reqs[:cap]:
         if r["symbol"]:
             hits = resolver.resolve(r["symbol"], r["file"])
             if hits:
                 parts.append("<context>\n" +
-                             "\n".join(s.fmt() for s in hits) + "\n</context>")
+                             "\n".join(_clip(s, cap_lines) for s in hits) +
+                             "\n</context>")
                 continue
         if r["file"]:
-            text = resolver.window(r["file"], r["line"] or 0,
-                                   pad=120 if not r["line"] else 40)
+            try:
+                all_lines = (root / r["file"]).read_text(
+                    errors="replace").splitlines()
+            except Exception:
+                all_lines = []
+            pad = 40 if r["line"] else 120
+            center = r["line"] or 1
+            text = "\n".join(f"{i+1:>5} {l}" for i, l in enumerate(
+                all_lines[max(0, center - pad):center + pad],
+                max(0, center - pad)))
             if text:
-                parts.append(f"<context>\n### {r['file']}\n{text}\n</context>")
+                # a bare <file> request returns the head — say how big the
+                # file is so the model can page to the part it needs
+                note = (f" ({len(all_lines)} lines total)"
+                        if not r["line"] and len(all_lines) > 240 else "")
+                parts.append(f"<context>\n### {r['file']}{note}\n"
+                             f"{text}\n</context>")
                 continue
         parts.append(f"<context_error>could not resolve {r}</context_error>")
     return "\n".join(parts) or "<context_error>unparseable request</context_error>"

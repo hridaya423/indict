@@ -9,3 +9,14 @@ watch.yaml
 
 # competition target clones — analysis only, never committed
 targets/
+
+# planted-vuln demo app — its own git repo (crafted history for the
+# variant engine); scanned as a target, never committed here
+demo/vulnapp/
+
+# dashboard toolchain — board_dist/ is the committed build output
+dashboard/node_modules/
+dashboard/shots/
+dashboard/test-results/
+dashboard/playwright-report/
+dashboard/pwerr.mjs

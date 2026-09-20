@@ -11,7 +11,7 @@ REPO="$(pwd)/targets/snare"
 echo "=== booting snare service (build + up, localhost-only) ==="
 uv run python - <<PY
 from pathlib import Path
-from crs.service import template_boot
+from indictment.service import template_boot
 h = template_boot(Path("service/templates/snare"), Path("$REPO"), "8011")
 assert h, "boot failed — see [service] output above"
 print(f"snare live at {h.base_url} (network {h.project}_default, no egress)")
@@ -20,13 +20,13 @@ PY
 echo; echo "=== firing webhook probes (no sig / bad sig / valid sig) ==="
 uv run python - <<PY
 import pathlib
-from crs.store import Finding
-from crs.service import ServiceHandle, FINDINGS
-from crs.httpprobes import probe_for
+from indictment.store import Finding
+from indictment.service import ServiceHandle, FINDINGS
+from indictment.httpprobes import probe_for
 # reconstruct the handle the boot created (same project/shared paths)
 shared = FINDINGS / "snare" / "service-shared"
 h = ServiceHandle(repo="snare", base_url="http://127.0.0.1:8011",
-                  project="crs-snare", shared=shared, ports=["8011"])
+                  project="indictment-snare", shared=shared, ports=["8011"])
 f = Finding(engine="demo", file="src/httpserver.rs", line=1,
             vuln_class="cmd-injection", severity="high", confidence=0.7,
             title="webhook signature gate", detail="x" * 100, poc="",
@@ -49,6 +49,6 @@ else:
 PY
 
 echo; echo "=== teardown ==="
-docker compose -p crs-snare -f findings/snare/compose.crs.yml down -v \
+docker compose -p indictment-snare -f findings/snare/compose.indictment.yml down -v \
   --remove-orphans 2>/dev/null || true
 echo "done."

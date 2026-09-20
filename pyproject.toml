@@ -1,5 +1,5 @@
 [project]
-name = "crs"
+name = "indictment"
 version = "0.1.0"
 description = "Grafted multi-engine vulnerability-discovery harness"
 requires-python = ">=3.11"

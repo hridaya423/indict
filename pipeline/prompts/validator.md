@@ -7,11 +7,13 @@ Code evidence:
 {code}
 ```
 
-Checks:
+Checks — PASS only when every one survives; a single broken hop is a FAIL:
 - Every hop exists and actually passes the claimed value (not just a similarly-named variable)
+- Every hop names a real file:line — a hop without a code location cannot be checked
 - Path conditions are SATISFIABLE — no guard on the path makes the bad input impossible
 - The source is genuinely attacker-controllable
 - Impact is real (code exec / privesc / info disclosure), not cosmetic
+- `why_failed` names the specific hop or guard that breaks the chain
 
 Reply with ONE JSON object:
 ```json

@@ -15,10 +15,10 @@ from pathlib import Path
 
 import yaml
 
-from crs.llms import Client
-from crs.resolver import EXT_LANG, Resolver
-from crs.store import Finding
-from crs.util import prompt
+from indictment.llms import Client
+from indictment.resolver import EXT_LANG, Resolver
+from indictment.store import Finding
+from indictment.util import prompt
 from .agent_loop import run_agent
 
 PACKS = yaml.safe_load(
@@ -27,7 +27,7 @@ PACKS = yaml.safe_load(
 # the agent loop can still <context_request> anything elided.
 # --frontier raises this; lazy read so CLI flags apply post-import
 def _max_file_lines() -> int:
-    return int(os.environ.get("CRS_MAX_FILE_LINES", "1200"))
+    return int(os.environ.get("INDICT_MAX_FILE_LINES", "1200"))
 
 
 def _pack(file: str) -> tuple[str, dict]:
@@ -36,7 +36,7 @@ def _pack(file: str) -> tuple[str, dict]:
     return lang, pack
 
 
-from crs.store import VULN_CLASSES as _CLASSES
+from indictment.store import VULN_CLASSES as _CLASSES
 _CLASS_ALIAS = {"proto-pollution": "prototype-pollution",
                 "deserialization": "deser", "command-injection": "cmd-injection",
                 "path_traversal": "path-traversal",
@@ -91,7 +91,9 @@ def _norm_class(raw: str, title: str) -> str:
     # 0 or >=2 class tokens: enum echo / garbage -> infer from title
     blob = f"{r} {title.lower()}"
     for hint, cls in _CLASS_HINTS.items():
-        if hint in blob:
+        # left word-boundary prefix match: "deserial" must hit
+        # "deserialization", but "race" must not fire on "brace"
+        if re.search(rf"(?<![\w-]){re.escape(hint)}", blob):
             return cls
     return "other"
 
@@ -106,14 +108,27 @@ def _norm_sev(raw: str) -> str:
     return "medium"
 
 
-def _content(root: Path, rel: str) -> str:
+def _content(root: Path, rel: str, resolver: Resolver | None = None) -> str:
     text = (root / rel).read_text(errors="replace")
     lines = text.splitlines()
     if len(lines) <= _max_file_lines():
         return text
-    return ("\n".join(lines[:200]) +
-            f"\n... [{len(lines) - 400} lines elided] ...\n" +
-            "\n".join(lines[-200:]))
+    lo, hi = 200, len(lines) - 200
+    # the elided middle is where big files hide their sinks — hand the
+    # model a def index so it can <context_request> what it can't see
+    symmap = ""
+    if resolver is not None:
+        elided = sorted((s for s in resolver.defs_in(rel)
+                         if lo < s.start <= hi), key=lambda s: s.start)
+        if elided:
+            symmap = ("\n[symbols in elided lines — request any via "
+                      "<context_request><symbol>NAME</symbol>"
+                      "</context_request>]\n" +
+                      "\n".join(f"  L{s.start}-{s.end} {s.name}"
+                                for s in elided[:80]) + "\n")
+    return ("\n".join(lines[:lo]) +
+            f"\n... [{hi - lo} lines elided] ...{symmap}" +
+            "\n".join(lines[hi:]))
 
 
 def hunt_one(client: Client, resolver: Resolver, root: Path, rel: str,
@@ -131,7 +146,7 @@ def hunt_one(client: Client, resolver: Resolver, root: Path, rel: str,
                    f"{json.dumps(threat_model)[:1500]}\n")
     user = (f"File: {rel}\nAnalyze for remotely-exploitable vulnerabilities. "
             f"Trace attacker input to dangerous sinks across the call chain."
-            f"{tm_hint}\n<code>\n{_content(root, rel)}\n</code>")
+            f"{tm_hint}\n<code>\n{_content(root, rel, resolver)}\n</code>")
     res = run_agent(client, resolver, root, system, user, role="hunt",
                     prefer=[model] if model else None, deadline=deadline)
     out = []
@@ -154,7 +169,9 @@ def hunt_one(client: Client, resolver: Resolver, root: Path, rel: str,
 def run(root: Path, queue: list[dict], client: Client, resolver: Resolver,
         workers: int = 4, model: str | None = None,
         threat_model: dict | None = None, **kw) -> list[Finding]:
+    from indictment import events  # late: keeps the engine import light
     deadline = kw.get("deadline")
+    out_dir, run_id = kw.get("out_dir"), kw.get("run")
     out: list[Finding] = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futs = {}
@@ -163,9 +180,14 @@ def run(root: Path, queue: list[dict], client: Client, resolver: Resolver,
                 break  # submit lazily so the budget actually bites
             futs[ex.submit(hunt_one, client, resolver, root, q["file"],
                            model, threat_model, deadline)] = q
-        for fut, q in futs.items():
+        # a slow model on a big queue can go silent for minutes — per-file
+        # progress rows keep live.json fresh so the board doesn't read stale
+        for i, (fut, q) in enumerate(futs.items()):
             try:
                 out.extend(fut.result())
             except Exception as e:
                 print(f"[hunter] {q['file']}: {e}", flush=True)
+            if out_dir and ((i + 1) % 5 == 0 or i + 1 == len(futs)):
+                events.progress(out_dir, "hunt", i + 1, len(futs), "files",
+                                run=run_id, engine="hunter", model=model)
     return out

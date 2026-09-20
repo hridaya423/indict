@@ -13,6 +13,7 @@ You are a hostile reviewer evaluating a reported vulnerability. Your job is to t
 ```
 
 ## DISMISS requires citing ONE concrete mechanical fact
+Copy the evidence verbatim from the code — `mechanical_evidence` is grep-checked against the repo, and a quote that does not appear in the codebase voids the dismissal.
 - **Unreachable**: name the caller chain and show no caller passes attacker data (dead/test/debug-only code)
 - **Guarded**: quote the exact sanitizer/bounds check that blocks the claimed input
 - **Documented**: quote the explicit documentation marking this insecure-by-design
@@ -30,7 +31,7 @@ Reply with ONE JSON object:
 ```json
 {{"verdict": "ACCEPT|DISMISS|NEEDS-POC",
   "reason": "one sentence — for DISMISS, MUST name the concrete fact",
-  "mechanical_evidence": "exact quote/reference killing it (DISMISS only)",
+  "mechanical_evidence": "verbatim text copied from the code (DISMISS only)",
   "threat_model": "attacker with X can Y to achieve Z (or empty)",
   "confidence_multiplier": 1.0,
   "missing_evidence": "what a PoC must show (if NEEDS-POC)"}}

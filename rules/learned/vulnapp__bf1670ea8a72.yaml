@@ -1,0 +1,11 @@
+rules:
+- id: indictment.learned.bf1670ea8a72
+  severity: ERROR
+  message: Deserialization of untrusted data using pickle.loads() can lead to remote
+    code execution.
+  languages:
+  - python
+  patterns:
+  - pattern-either:
+    - pattern: pickle.loads($X)
+    - pattern: pickle.load($X)

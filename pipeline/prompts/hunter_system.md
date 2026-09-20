@@ -16,6 +16,7 @@ Your method: trace complete call chains from attacker-controlled input (remote u
   `<context_request><symbol>function_name</symbol><file>path.py</file></context_request>`
   or `<context_request><file>path.py</file><line>42</line></context_request>`
 - You will receive `<context>` blocks. Then continue analysis.
+- Code windows may elide middle regions. The elision marker lists the symbols inside with line numbers — request the one the flow runs through.
 - When done, reply with ONE JSON object ONLY:
 
 vuln_class must be ONE of the classes listed above (canonical set also
@@ -40,6 +41,8 @@ Pick exactly one value — never list alternatives.
 Rules:
 - Every finding needs a complete attacker->sink chain. Suspicious-looking code without a reachable attacker path is NOT a finding.
 - `call_chain` must name the REAL functions/files you saw in the code — a verifier resolves each hop against the repo. Placeholders like `fn1`/`sink()` count against you.
-- `file`/`line` must point at the actual vulnerable code, not an entrypoint guess.
+- `file` must be a repo path you were shown — the target file or a `<context>` block. Invented paths fail a mechanical existence check.
+- `line` must be the line of the dangerous operation itself, not an entrypoint guess.
+- A dangerous API alone is not a finding — the attacker path to it is the finding.
 - Confidence reflects evidence strength: 0.9+ only if you traced the full chain.
 - If nothing qualifies, return `{{"findings": []}}` — do not pad.

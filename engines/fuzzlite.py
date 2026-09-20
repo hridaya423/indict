@@ -7,20 +7,21 @@ rust/python (dumb mutator loop driving a stdin binary). Runs are time-boxed.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import time
 from pathlib import Path
 
-from crs.llms import Client
-from crs.store import Finding
-from crs.util import prompt
+from indictment.llms import Client
+from indictment.store import Finding
+from indictment.util import prompt
 
 PARSER_HINTS = ("parse", "decode", "unmarshal", "read", "load", "import",
                 "deserial", "unpack", "tokeniz", "lex")
-IMG = {"go": "crs-sandbox-go", "c": "crs-sandbox-c", "cpp": "crs-sandbox-c",
-       "rust": "crs-sandbox-rust", "python": "crs-sandbox-python",
-       "java": "crs-sandbox-java"}
+IMG = {"go": "indictment-sandbox-go", "c": "indictment-sandbox-c", "cpp": "indictment-sandbox-c",
+       "rust": "indictment-sandbox-rust", "python": "indictment-sandbox-python",
+       "java": "indictment-sandbox-java"}
 
 
 def _targets(queue: list[dict], langs: list[str]) -> list[dict]:
@@ -28,6 +29,17 @@ def _targets(queue: list[dict], langs: list[str]) -> list[dict]:
             if any(h in q["file"].lower() for h in PARSER_HINTS)
             and any(q["file"].endswith(e) for e in
                     (".go", ".c", ".cc", ".cpp", ".rs", ".py", ".java"))][:6]
+
+
+CRASH_KEYS = ("ERROR: AddressSanitizer", "panic:", "SIGSEGV",
+              "runtime error", "SUMMARY:", "Test unit written")
+
+
+def _has_crash(stdout: str, stderr: str) -> list[str]:
+    """Crash reports land on stderr (ASan, go panic, libFuzzer) — stdout
+    alone is blind."""
+    return [l for l in (stdout + "\n" + stderr).splitlines()
+            if any(k in l for k in CRASH_KEYS)]
 
 
 def run(root: Path, queue: list[dict], langs: list[str], client: Client,
@@ -61,8 +73,16 @@ def run(root: Path, queue: list[dict], langs: list[str], client: Client,
             expect_json=False)
         harness = r.text
         if "```" in harness:
-            harness = harness.split("```")[1].split("```")[0]
-        work = fdir / Path(rel).stem
+            block = harness.split("```")[1].lstrip("\n")
+            # drop a markdown language tag (```bash) — a bare first word is
+            # the fence label, not runnable script
+            if re.match(r"^(bash|sh|zsh|shell|python|py|javascript|js|node)"
+                        r"\n", block):
+                block = block.split("\n", 1)[1]
+            harness = block
+        # stem alone collides — src/parse.go and lib/parse.go share a dir;
+        # keep the path shape under fuzz/
+        work = fdir / Path(rel).with_suffix("")
         work.mkdir(parents=True, exist_ok=True)
         (work / "harness.txt").write_text(harness)
         run_sh = work / "run.sh"
@@ -72,7 +92,7 @@ def run(root: Path, queue: list[dict], langs: list[str], client: Client,
         # harness is model output; runner compiles+runs inside the sandbox img
         (work / "runner.sh").write_text(harness if harness.startswith("#!")
                                         else f"#!/bin/bash\n{harness}\n")
-        img = IMG.get(lang, "crs-sandbox-python")
+        img = IMG.get(lang, "indictment-sandbox-python")
         try:
             res = subprocess.run(
                 ["docker", "run", "--rm", "--network", "none", "--memory", "2g",
@@ -83,10 +103,7 @@ def run(root: Path, queue: list[dict], langs: list[str], client: Client,
         except Exception as e:
             print(f"[fuzzlite] {t['file']}: {e}", flush=True)
             continue
-        crashes = [l for l in res.stdout.splitlines()
-                   if any(k in l for k in
-                          ("ERROR: AddressSanitizer", "panic:", "SIGSEGV",
-                           "runtime error", "SUMMARY:", "Test unit written"))]
+        crashes = _has_crash(res.stdout, res.stderr)
         if crashes:
             out.append(Finding(
                 engine="fuzzlite", model=r.model, file=rel,

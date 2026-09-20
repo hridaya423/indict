@@ -1,4 +1,4 @@
-"""Semantic queue-ranking tests (crs/rank.py + crs/sie.py).
+"""Semantic queue-ranking tests (indictment/rank.py + indictment/sie.py).
 Run: uv run python tests/test_rank_semantic.py"""
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs import rank, sie
-from crs.store import Finding
+from indictment import rank, sie
+from indictment.store import Finding
 
 ROUTER = '''import sqlite3
 

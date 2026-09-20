@@ -8,7 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from crs import sie
+from indictment import sie
 
 
 class Resp:
@@ -54,7 +54,7 @@ def main() -> None:
     assert v == [[1.0, 0.0], [0.0, 1.0]], v
     assert len(stub.calls) == 1 and stub.calls[0][0].endswith("/v1/embeddings"), \
         stub.calls
-    assert stub.calls[0][1] == {"model": "BAAI/bge-m3",
+    assert stub.calls[0][1] == {"model": "Qwen/Qwen3-Embedding-4B",
                                 "input": ["alpha", "beta"]}, stub.calls[0][1]
     ok.append("openai shape parsed, one call")
 
@@ -72,7 +72,7 @@ def main() -> None:
     assert [u for u, _ in stub.calls] == [
         stub.calls[0][0], stub.calls[0][0].replace("/v1/embeddings", "/encode")], \
         stub.calls
-    assert stub.calls[1][1] == {"model": "BAAI/bge-m3",
+    assert stub.calls[1][1] == {"model": "Qwen/Qwen3-Embedding-4B",
                                 "inputs": ["one", "two"]}, stub.calls[1][1]
     ok.append("404 fallback to native /encode shape")
 
