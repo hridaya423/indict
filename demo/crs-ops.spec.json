@@ -157,22 +157,22 @@
       "id": "ann-rank",
       "label": "Superlinked",
       "body": "bge-m3 \u2014 semantic boost",
-      "x": 830,
-      "y": 1020
+      "x": 1000,
+      "y": 938
     },
     {
       "id": "ann-prove",
       "label": "Superlinked",
       "body": "Qwen3-Reranker-4B \u2014 picks the order",
       "x": 700,
-      "y": 2300
+      "y": 2420
     },
     {
       "id": "ann-notify",
       "label": "Superlinked",
       "body": "Qwen3.5-4B \u2014 drafts the issue",
       "x": 700,
-      "y": 2690
+      "y": 2720
     },
     {
       "id": "memory",
