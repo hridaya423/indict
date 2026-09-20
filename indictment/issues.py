@@ -13,7 +13,6 @@ from pathlib import Path
 import httpx
 
 from .report import cvss_lite
-from .report import cvss_lite
 from .store import Finding, dump as store_dump, load as store_load
 from .util import prompt
 
@@ -99,6 +98,17 @@ def run(repo: str, out_root: Path, client, file_issues: bool) -> None:
         return
     live = bool(file_issues and os.environ.get("INDICT_ISSUE_REPO")
                 and os.environ.get("GITHUB_TOKEN"))
+    if live:
+        # rate-limit real filings: a bad draft run must not open N live
+        # issues. Over-cap findings stay untagged — next --issue files them.
+        cap = int(os.environ.get("INDICT_ISSUE_MAX", "10"))
+        if len(todo) > cap:
+            print(f"[issue] {repo}: {len(todo)} fileable, cap {cap} — "
+                  "rest stay queued for the next --issue run", flush=True)
+            todo = todo[:cap]
+        for f in todo:
+            print(f"[issue] will file: {f.id} [{f.severity}] "
+                  f"{f.title[:70]}", flush=True)
     mode = "LIVE" if live else "draft"
     for f in todo:
         try:

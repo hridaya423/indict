@@ -271,6 +271,56 @@ def _pid_alive(pid) -> bool:
         return True
 
 
+# canonical pipeline order — weight ≈ each stage's share of wall clock on a
+# mid-size hunt. Used only to fold per-stage progress into one fraction.
+STAGE_W = {"ingest": .01, "recon": .02, "sweep": .03, "rank": .01,
+           "hunt": .60, "consensus": .01, "adjudicate": .20,
+           "poc": .10, "report": .02}
+LLM_ENGINES = {"hunter", "taintgen", "explorer", "variant", "fuzzlite"}
+
+
+def _eta(rec: dict | None, intervals: list[dict], pending: list[dict],
+         lanes: list[dict], evts: list[dict], state: str,
+         started: float | None, now: float) -> int | None:
+    """Seconds-remaining estimate for a running run. Stage weights carry the
+    shape; stage-progress rows (completed/total) and finished engine lanes
+    fill in the fraction. Monotone by construction — the number only drifts
+    down as work lands, never jumps."""
+    if state != "running" or not started:
+        return None
+    if not any(e.get("schemaVersion") for e in evts):
+        return None                       # legacy run — no structured stages
+    engines = (rec or {}).get("engines") or []
+    models = (rec or {}).get("models") or []
+    passes = (rec or {}).get("passes") or 1
+    units_exp = (len([e for e in engines if e in LLM_ENGINES])
+                 * max(1, len(models)) * passes)
+    prog: dict[str, float] = {}
+    for e in evts:                        # latest progress row per stage
+        if e.get("kind") == "stage-progress" and e.get("total"):
+            prog[e.get("stageId") or e.get("stage")] = \
+                (e.get("completed") or 0) / max(1, e["total"])
+    frac = 0.0
+    for iv in intervals:                  # finished/skipped stages count full
+        w = STAGE_W.get(iv["id"], 0.0)
+        if iv.get("state") == "running":
+            if iv["id"] == "hunt":
+                done = len(lanes)
+                frac += w * min(0.95, done / max(units_exp, done + 1))
+            elif iv["id"] in prog:
+                frac += w * min(0.97, prog[iv["id"]])
+            else:
+                frac += w * 0.4           # underway, no counter to cite
+        else:
+            frac += w
+    frac += sum(STAGE_W.get(p["id"], 0.0) for p in pending)
+    frac = min(0.97, max(frac, 0.03))     # never 0 (infinite) or 1 (zero)
+    return int((now - started) * (1 - frac) / frac)
+
+
+
+
+
 def _run_state(rid: str, rec: dict | None, evts: list[dict],
                live: dict | None) -> tuple[str, str]:
     """(state, freshness) — separate axes. run.json wins; else terminal
@@ -352,6 +402,8 @@ def _run_summary(repo_dir: Path, rid: str, rec: dict | None,
                               "label": running_iv["label"]}
                              if running_iv else None),
             "progress": _progress(evts),
+            "etaSec": _eta(rec, intervals, pending, lanes, evts, state,
+                           started, time.time()),
             "stages": intervals, "pendingStages": pending, "lanes": lanes,
             "heartbeat": _heartbeat(rid, live),
             "engineHealth": _engine_health(evts),

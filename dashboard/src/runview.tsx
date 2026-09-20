@@ -38,7 +38,7 @@ export function RepoScansTable({ repos, selected }: {
                       ? <RunStateBadge state="failed" />
                       : <span className="muted">—</span>}
               </td>
-              <td><WorkCell progress={run.progress} state={run.state} /></td>
+              <td><WorkCell progress={run.progress} state={run.state} etaSec={run.etaSec} /></td>
               <td style={{ textAlign: 'right' }}>
                 {run.state === 'completed'
                   ? <span className="muted">Finished</span>

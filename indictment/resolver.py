@@ -6,6 +6,8 @@ Cross-file resolution = search all indexed defs (what jedi gives in practice).
 """
 from __future__ import annotations
 
+import os
+import pickle
 import subprocess
 from dataclasses import dataclass
 from functools import lru_cache
@@ -78,12 +80,18 @@ class Snippet:
 
 
 class Resolver:
-    def __init__(self, root: str | Path, max_defs: int = 40000):
+    def __init__(self, root: str | Path, max_defs: int = 40000,
+                 cache_dir: str | Path | None = None):
         self.root = Path(root)
         self.defs: dict[str, list[Snippet]] = {}
         self.by_file: dict[str, list[Snippet]] = {}  # rel path -> its defs
         self.call_map: dict[str, list[str]] = {}   # "file:fn" -> callee names
         self.src_files: list[str] = []
+        # watch rescans re-index the same repo every cycle — persist
+        # per-file parse results keyed on (mtime_ns, size); unchanged
+        # files skip tree-sitter entirely. None = no cache (one-off runs).
+        self._cache_file = (Path(cache_dir) / "resolver-cache.pkl"
+                            if cache_dir else None)
         self._index(max_defs)
 
     # ---------- indexing ----------
@@ -91,6 +99,15 @@ class Resolver:
         files = subprocess.run(
             ["rg", "--files", "-0"], cwd=self.root,
             capture_output=True).stdout.decode().split("\0")
+        cache: dict = {}
+        if self._cache_file and self._cache_file.exists():
+            try:
+                loaded = pickle.loads(self._cache_file.read_bytes())
+                if isinstance(loaded, dict):
+                    cache = loaded
+            except Exception:
+                pass  # corrupt cache -> re-parse everything, never fatal
+        new_cache: dict = {}
         for rel in files:
             if not rel or rel.startswith((".git/", "vendor/", "node_modules/",
                                           "dist/", "build/", "target/")):
@@ -99,22 +116,48 @@ class Resolver:
             if not lang:
                 continue
             try:
-                src = (self.root / rel).read_bytes()
-                if len(src) > MAX_SRC_BYTES:
-                    continue
-                parser = get_parser(lang)
-            except Exception:
+                st = (self.root / rel).stat()
+            except OSError:
                 continue
+            if st.st_size > MAX_SRC_BYTES:
+                continue
+            sig = (st.st_mtime_ns, st.st_size)
+            ent = cache.get(rel)
+            if ent and ent[0] == sig:
+                snips, calls = ent[1], ent[2]
+            else:
+                try:
+                    src = (self.root / rel).read_bytes()
+                    parser = get_parser(lang)
+                except Exception:
+                    continue
+                snips, calls = self._walk(parser.parse(src).root_node,
+                                          rel, src, lang)
             self.src_files.append(rel)
-            tree = parser.parse(src)
-            self._walk(tree.root_node, rel, src, lang)
+            for s in snips:
+                self.defs.setdefault(s.name, []).append(s)
+            if snips:
+                self.by_file[rel] = snips
+            self.call_map.update(calls)
+            if self._cache_file:
+                new_cache[rel] = (sig, snips, calls)
             if len(self.defs) > max_defs:
-                return
+                break
+        if self._cache_file:
+            try:
+                tmp = self._cache_file.with_suffix(".tmp")
+                tmp.write_bytes(pickle.dumps(new_cache))
+                os.replace(tmp, self._cache_file)
+            except Exception:
+                pass
 
-    def _walk(self, node, rel: str, src: bytes, lang: str) -> None:
-        # iterative — pathological nesting depth must not RecursionError
-        # the whole run
+    def _walk(self, node, rel: str, src: bytes, lang: str
+              ) -> tuple[list[Snippet], dict[str, list[str]]]:
+        """One file's defs + call edges. Iterative — pathological nesting
+        depth must not RecursionError the whole run."""
         stack = [node]
+        snips: list[Snippet] = []
+        calls: dict[str, list[str]] = {}
         while stack:
             node = stack.pop()
             if node.type in DEF_NODES.get(lang, set()):
@@ -122,10 +165,8 @@ class Resolver:
                 if name:
                     text = src[node.start_byte:node.end_byte].decode(
                         errors="replace")
-                    snip = Snippet(rel, node.start_point[0] + 1,
-                                   node.end_point[0] + 1, name, text)
-                    self.defs.setdefault(name, []).append(snip)
-                    self.by_file.setdefault(rel, []).append(snip)
+                    snips.append(Snippet(rel, node.start_point[0] + 1,
+                                         node.end_point[0] + 1, name, text))
                     callees: set[str] = set()
                     for n in self._iter(node):
                         if n.type in CALL_NODES:
@@ -134,8 +175,9 @@ class Resolver:
                             if c:
                                 callees.add(c)
                     if callees:
-                        self.call_map[f"{rel}:{name}"] = sorted(callees)
+                        calls[f"{rel}:{name}"] = sorted(callees)
             stack.extend(node.children)
+        return snips, calls
 
     @staticmethod
     def _iter(node):

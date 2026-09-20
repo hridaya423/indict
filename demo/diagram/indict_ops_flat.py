@@ -266,9 +266,9 @@ svg.append(f'<text x="1122" y="892" fill="{MUT}" font-size="9.5" font-family="In
 svg.append(f'<text x="1122" y="908" fill="{MUT}" font-size="9.5" font-family="Inter,sans-serif">· Verified bugs teach the scanner</text>')
 
 # straddles the AI&Context -> Source boundary; drawn late so cards don't cover it
-svg.append('<rect x="302" y="150" width="120" height="38" rx="3" fill="#ffffff" opacity="0.92"/>')
-svg.append(f'<text x="362" y="165" fill="{MUT}" font-size="9.5" font-family="Inter,sans-serif" text-anchor="middle">context</text>')
-svg.append(f'<text x="362" y="179" fill="{MUT}" font-size="9.5" font-family="Inter,sans-serif" text-anchor="middle">powers the AI</text>')
+svg.append('<rect x="302" y="146" width="120" height="36" rx="3" fill="#ffffff" opacity="0.92"/>')
+svg.append(f'<text x="362" y="160" fill="{MUT}" font-size="9.5" font-family="Inter,sans-serif" text-anchor="middle">context</text>')
+svg.append(f'<text x="362" y="174" fill="{MUT}" font-size="9.5" font-family="Inter,sans-serif" text-anchor="middle">powers the AI</text>')
 
 # ---- footer ----
 svg.append(f'<text x="40" y="1520" fill="{MUT}" font-size="11" font-family="Inter,sans-serif">INDICT  |  Continuous security research, from signal to fix.</text>')

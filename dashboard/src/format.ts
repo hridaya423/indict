@@ -72,6 +72,19 @@ export function fmtDurSecs(s: number | null | undefined): string {
 
 const pad2 = (n: number) => String(n).padStart(2, '0')
 
+/** ETA display — deliberately coarse so it reads smooth, not twitchy:
+    rounding grows with magnitude and nothing under ~10s is promised. */
+export function fmtEta(s: number | null | undefined): string {
+  if (s == null) return ''
+  if (s < 90) return '~1 min'
+  const m = s / 60
+  if (m < 10) return `~${Math.max(2, Math.round(m))} min`
+  if (m < 60) return `~${Math.round(m / 5) * 5} min`
+  const h = Math.floor(m / 60)
+  const rem = Math.round((m % 60) / 15) * 15
+  return rem === 60 ? `~${h + 1}h` : `~${h}h${rem ? ` ${rem}m` : ''}`
+}
+
 export function fmtBytes(n: number | null | undefined): string {
   if (n == null) return '—'
   if (n < 1024) return `${n} B`

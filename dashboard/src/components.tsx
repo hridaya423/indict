@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CheckCircle, XCircle, Warning, File, FileText, FileCode, DownloadSimple, Eye, ArrowClockwise } from '@phosphor-icons/react'
 import type { EventRow, Heartbeat, StageInterval, StagePending, EngineLane, ArtifactEntry, Progress } from './types'
-import { fmtTime, fmtDur, fmtBytes, ago, RUN_LABEL } from './format'
+import { fmtTime, fmtDur, fmtBytes, fmtEta, ago, RUN_LABEL } from './format'
 import { Link, navigate } from './router'
 import { ApiError } from './api'
 
@@ -42,11 +42,12 @@ export function CheckBadge({ outcome }: { outcome: string }) {
   return <Badge kind={k} label={l} />
 }
 
-export function WorkCell({ progress, state }: { progress: Progress | null; state?: string }) {
+export function WorkCell({ progress, state, etaSec }: { progress: Progress | null; state?: string; etaSec?: number | null }) {
   if (state === 'completed') return <span className="txt muted">Complete</span>
   if (state === 'failed') return <span className="txt" style={{ color: 'var(--danger)' }}>Failed</span>
+  const eta = state === 'running' && etaSec != null ? fmtEta(etaSec) : ''
   if (!progress || progress.completed == null || progress.total == null)
-    return <span className="txt muted">—</span>
+    return <span className="txt muted">{eta ? `${eta} left` : '—'}</span>
   const pct = Math.min(100, Math.round((progress.completed / Math.max(1, progress.total)) * 100))
   return (
     <span className="work">
@@ -55,6 +56,7 @@ export function WorkCell({ progress, state }: { progress: Progress | null; state
         <i style={{ width: `${pct}%` }} />
       </span>
       <span className="txt">{progress.completed} / {progress.total} {progress.unit}</span>
+      {eta && <span className="txt muted">{eta} left</span>}
     </span>
   )
 }

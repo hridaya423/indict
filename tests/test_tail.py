@@ -225,6 +225,36 @@ def t_learn_gate(tmp: Path) -> None:
         del os.environ["INDICT_RULES_LEARNED"]
 
 
+def t_fuzz_script() -> None:
+    from engines.fuzzlite import _script
+    # bare text passes through
+    assert _script("#!/bin/bash\necho hi") == "#!/bin/bash\necho hi"
+    # fenced block: language tag line is stripped, not shipped to bash
+    out = _script('Here is the harness:\n```bash\necho hi\n```\ndone')
+    assert out.startswith("echo hi"), out
+    # fence with no language tag keeps the first line
+    out = _script('```\necho hi\n```')
+    assert "echo hi" in out
+    print("PASS fuzzlite: _script strips fences + language tags")
+
+
+def t_window_guard(tmp: Path) -> None:
+    from indictment.resolver import Resolver, guard
+    root = tmp / "repo"
+    root.mkdir(parents=True)
+    (root / "a.py").write_text("x = 1\n")
+    # model-supplied paths can't escape the repo
+    assert guard(root, "../etc/passwd") is None
+    assert guard(root, "a.py") is not None
+    r = Resolver(root)
+    # missing file -> empty window (explorer's `if w:` hop-skip path)
+    assert r.window("nope.py", 1) == ""
+    assert r.window("../outside.py", 1) == ""
+    # real file -> numbered window
+    assert "x = 1" in r.window("a.py", 1)
+    print("PASS resolver: guard rejects escapes, window empty on misses")
+
+
 def main() -> None:
     with tempfile.TemporaryDirectory(prefix="crstail") as td:
         tmp = Path(td)
@@ -233,6 +263,8 @@ def main() -> None:
         t_pack(tmp / "pk")
         t_chain_pairs(tmp / "ch")
         t_learn_gate(tmp / "ln")
+        t_window_guard(tmp / "wg")
+    t_fuzz_script()
     print("TAIL TESTS OK")
 
 

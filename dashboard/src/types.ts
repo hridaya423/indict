@@ -30,6 +30,7 @@ export interface RunSummary {
   outcome?: Record<string, number | null> | null
   currentStage: { id: string; label: string } | null
   progress: Progress | null
+  etaSec?: number | null
   stages: StageInterval[]; pendingStages: StagePending[]; lanes: EngineLane[]
   heartbeat: Heartbeat | null
   engineHealth: 'complete' | 'degraded' | 'unknown'

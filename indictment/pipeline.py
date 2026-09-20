@@ -206,6 +206,7 @@ def run(target: str, engine_names: list[str] | None = None, workers: int = 4,
         "target": str(target), "revision": revision, "startedAt": t0,
         "state": "running", "engines": enabled,
         "models": [m.name for m in (client.models if client else [])],
+        "passes": model_passes,
         "scope": {"since": since, "files": only_files,
                   "queueLimit": queue_limit or None, "noLlm": no_llm,
                   "reuseCandidates": reuse_candidates, "resume": resume,
@@ -281,7 +282,7 @@ def run(target: str, engine_names: list[str] | None = None, workers: int = 4,
         events.stage_end(out_dir, "rank", f"{len(queue)} files queued",
                          run=run_id, completed=len(queue), total=len(queue),
                          unit="files")
-        resolver = Resolver(root)
+        resolver = Resolver(root, cache_dir=out_dir)
 
         # --- LLM engines over the ranked queue; candidates append as produced ---
         deadline = (time.time() + hunt_budget_min * 60) if hunt_budget_min \
