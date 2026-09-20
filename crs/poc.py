@@ -174,6 +174,38 @@ def prove(root: Path, resolver: Resolver, client: Client | None,
                 f.verdict += " | PoC did not reproduce"
         if f.status == "verified":
             continue
+        # pen-test layer: if this repo boots as a live service, attack the
+        # REAL app with a class-matched probe before falling back to the
+        # generic sandbox probe. Upgrade-only — never downgrades.
+        try:
+            from . import service as _svc
+            from . import httpprobes as _http
+            handle = _svc.booted(root)
+            if handle:
+                t = _http.probe_for(f, handle)
+                if t:
+                    sscript, ssignal = t
+                    (pdir / "service-probe.sh").write_text(sscript)
+                    soutput = handle.run_probe(pdir, "service-probe.sh")
+                    (pdir / "service_probe_output.txt").write_text(
+                        soutput[:20000])
+                    dead = any(s in soutput for s in (
+                        "runner failed", "Connection refused",
+                        "Name or service not known"))
+                    if ssignal in soutput and not dead:
+                        f.status = "verified"
+                        f.tags += ["poc-verified", "service-verified"]
+                        f.confidence = max(f.confidence, 0.98)
+                        f.detail += (
+                            f"\nService PoC evidence ({pdir}, live app at "
+                            f"{handle.base_url}):\n{soutput[:800]}"
+                            f"\nReproduce: see {pdir}/service-probe.sh — "
+                            f"service {handle.base_url}, network "
+                            f"{handle.project}_default")
+        except Exception as e:
+            print(f"[poc] service probe skipped: {e}", flush=True)
+        if f.status == "verified":
+            continue
         # last resort: deterministic probe skeleton for this vuln class
         probe = probe_for(f.vuln_class, f.file, f.id)
         if probe:
