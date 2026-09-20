@@ -91,3 +91,32 @@ specify first-wins vs shared credit on duplicates — so win either way:
    there first.
 4. SYSTEM score is fully differentiated — demo the dismissal of a
    hallucination as a feature.
+
+## The unified system (CRS-OPS) — pitch-day commands
+
+Three tracks, one loop: watch (continuous scanning) → funnel → alerts
+(monitoring) → service probes (pen-test). All committed.
+
+```bash
+# estate at a glance — every repo, last commit scanned, verified counts
+./scan --status
+
+# continuous mode: registry-driven rescan on every new commit, alerts
+# on new findings (file + terminal + CRS_ALERT_WEBHOOK if set)
+cp watch.yaml.example watch.yaml   # then edit: the 4 target repos
+./scan --watch                     # Ctrl-C to stop; CRS_WATCH_INTERVAL=120
+
+# single-cycle check (rehearsal / CI)
+./scan --watch-once
+
+# live pen-test demo: snare as a real service, crafted webhooks,
+# HMAC gate discrimination + command-execution side effect
+bash demo/snare-chain.sh
+```
+
+Semantic layer (Superlinked): with SIE_API_KEY set, queue ranking gets
+a cosine boost against vuln descriptors and findings dedupe across
+locations (cos >= 0.90). Without the key: identical behavior.
+
+Alerts land in findings/<repo>/alerts.jsonl — one JSON line per new
+verified/adjudicated finding and per dep-CVE.

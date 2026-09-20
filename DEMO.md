@@ -67,3 +67,19 @@ the sandbox, not the model. That's the whole point.
 | 30B crashes the box | reboot is 2 min; golden state survives; demo.sh works immediately after |
 | Frontier endpoint down | `--models local` (qwen3-30b) or the smoke models — pipeline is identical |
 | Only 60 seconds | `bash tests/verify.sh` — selfcheck + scoreboard + doctor in one command |
+
+## Unified-system arc (CRS-OPS — replaces the funnel-only arc)
+
+1. `./scan --status` — the estate: repos watched, last commit scanned,
+   verified counts. One screen = "continuous scanning system".
+2. Split terminal: `./scan --watch` running live.
+3. Push a bad commit to a watched repo → within one cycle: rescan →
+   `[alert]` fires on screen + alerts.jsonl. "Monitoring" demoed.
+4. `bash demo/snare-chain.sh` — snare boots as a real service; crafted
+   webhooks: unsigned 401, forged 401, known-secret 200 + command
+   execution logged. "Pen-test" demoed live, honestly (if the target
+   is solid, the probe proves the control holds).
+5. Scoreboard + a verified finding's reproduce command (proof layer).
+
+The pitch line: "One system, three tracks: it watches, it proves, it
+alerts — and the proof is machine-checked down to the line."
