@@ -25,15 +25,8 @@
       "id": "watch",
       "label": "Watch",
       "icon": "eye",
-      "body": "polls for new commits",
+      "body": "polls for new commits\n(state: last sha + known bugs)",
       "accent": "cyan"
-    },
-    {
-      "id": "memory",
-      "label": "Memory",
-      "icon": "db",
-      "body": "last commit + known bugs",
-      "accent": "muted"
     },
     {
       "id": "scan",
@@ -87,12 +80,6 @@
       "icon": "experiment",
       "body": "crashes become leads",
       "accent": "purple"
-    },
-    {
-      "id": "pool",
-      "label": "Candidate pile",
-      "icon": "queue",
-      "body": "every engine drops leads here"
     },
     {
       "id": "dedup",
@@ -155,7 +142,9 @@
       "label": "Fix verified",
       "kind": "terminal",
       "accent": "green",
-      "body": "PoC dead \u00b7 patch rescans clean\nverdict lands on the issue"
+      "body": "PoC dead \u00b7 patch rescans clean\nverdict lands on the issue",
+      "x": 500,
+      "y": 2600
     },
     {
       "id": "models",
@@ -163,18 +152,33 @@
       "icon": "model",
       "body": "Devin ACP + SIE\nthink \u00b7 embed \u00b7 rerank",
       "accent": "muted"
+    },
+    {
+      "id": "ann-rank",
+      "label": "Superlinked",
+      "body": "bge-m3 \u2014 semantic boost",
+      "x": 880,
+      "y": 725
+    },
+    {
+      "id": "ann-prove",
+      "label": "Superlinked",
+      "body": "Qwen3-Reranker-4B",
+      "x": 880,
+      "y": 1770
+    },
+    {
+      "id": "ann-notify",
+      "label": "Superlinked",
+      "body": "Qwen3.5-4B \u2014 drafts the issue",
+      "x": 880,
+      "y": 2110
     }
   ],
   "edges": [
     {
       "from": "repos",
       "to": "watch"
-    },
-    {
-      "from": "watch",
-      "to": "memory",
-      "label": "remember",
-      "style": "dashed"
     },
     {
       "from": "watch",
@@ -192,7 +196,7 @@
     },
     {
       "from": "sweep",
-      "to": "pool",
+      "to": "dedup",
       "label": "findings"
     },
     {
@@ -217,26 +221,22 @@
     },
     {
       "from": "hunter",
-      "to": "pool"
+      "to": "dedup"
     },
     {
       "from": "explorer",
-      "to": "pool"
+      "to": "dedup"
     },
     {
       "from": "taintgen",
-      "to": "pool"
+      "to": "dedup"
     },
     {
       "from": "variant",
-      "to": "pool"
+      "to": "dedup"
     },
     {
       "from": "fuzzlite",
-      "to": "pool"
-    },
-    {
-      "from": "pool",
       "to": "dedup"
     },
     {
@@ -303,6 +303,24 @@
       "kind": "loop",
       "label": "new commit \u2192 rescan",
       "accent": "cyan"
+    },
+    {
+      "from": "ann-rank",
+      "to": "rank",
+      "style": "dashed",
+      "accent": "purple"
+    },
+    {
+      "from": "ann-prove",
+      "to": "prove",
+      "style": "dashed",
+      "accent": "purple"
+    },
+    {
+      "from": "ann-notify",
+      "to": "notify",
+      "style": "dashed",
+      "accent": "purple"
     }
   ],
   "footer": "the model proposes \u2014 the mechanics decide. nothing ships without proof, not even the fix.",
