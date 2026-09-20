@@ -12,7 +12,6 @@ from pathlib import Path
 
 import httpx
 
-from .report import cvss_lite
 from .store import Finding, dump as store_dump, load as store_load
 from .util import prompt
 

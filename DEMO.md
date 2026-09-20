@@ -83,3 +83,20 @@ the sandbox, not the model. That's the whole point.
 
 The pitch line: "One system, three tracks: it watches, it proves, it
 alerts — and the proof is machine-checked down to the line."
+
+## Closed-loop arc (the full SOC story — extends the above)
+
+5. The page: with Twilio env set, a critical verified finding fires
+   SMS + voice call; without creds every channel still records to
+   `alerts-outbox.jsonl` (show the sim lines — honest demo).
+6. `./scan --issue vulnapp --file` — the 4B drafts a responsible-
+   disclosure issue, secret-redacted, filed to CRS_ISSUE_REPO.
+   (Without creds: same drafts printed, recorded as dry runs.)
+7. `./scan --explain vulnapp <id>` — the case file: who proposed it,
+   what the falsifier checked, the sandbox trace, the alert timeline.
+8. `./scan --fix vulnapp <id>` — the agent (codex/devin-acp/any CLI via
+   CRS_FIXER) patches in an isolated worktree; the GATE then decides:
+   the recorded PoC must die on patched code AND the patch's own diff
+   rescans clean. `fix-verified` pages out + comments on the issue.
+   "The model proposes the patch — the funnel grades it. AI fixes AI
+   code, and the patch gets audited before it can merge."

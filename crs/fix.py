@@ -15,10 +15,12 @@ import subprocess
 import time
 from pathlib import Path
 
+import httpx
+
 from . import alerts
-from .poc import EXT_IMG, RUN_POC
+from .poc import RUN_POC
 from .resolver import Resolver
-from .store import Finding, load as store_load
+from .store import Finding, dump as store_dump, load as store_load
 
 FIX_TIMEOUT = int(os.environ.get("CRS_FIX_TIMEOUT", "900"))
 
@@ -84,7 +86,6 @@ def _dispatch(backend: str, wt: Path, task_md: Path) -> None:
     elif backend == "devin-acp":
         url = os.environ.get("CRS_DEVIN_ACP_URL", "http://127.0.0.1:8319/v1")
         model = os.environ.get("CRS_DEVIN_ACP_MODEL", "swe-2-max")
-        import httpx
         r = httpx.post(f"{url.rstrip('/')}/chat/completions",
             json={"model": model, "temperature": 0.1,
                   "max_tokens": 16384,
@@ -179,7 +180,6 @@ def _comment_issue(repo: str, f: Finding, verdict: str,
                 "/issues/" in str(rec.get("url", "")):
             num = rec["url"].rsplit("/", 1)[-1]
             try:
-                import httpx
                 httpx.post(
                     f"https://api.github.com/repos/{target}/issues/{num}"
                     "/comments",
@@ -256,5 +256,4 @@ def run(repo: str, finding_id: str, out_root: Path,
             _comment_issue(repo, f, verdict, reason, out_root)
         except Exception as e:
             print(f"[fix] notify failed: {e}", flush=True)
-    from .store import dump as store_dump
     store_dump(fdir / "findings.jsonl", findings)

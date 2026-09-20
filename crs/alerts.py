@@ -118,13 +118,11 @@ def emit(repo: str, finding, kind: str, out_root: Path | None = None,
     out_root = out_root or FINDINGS_ROOT
     try:
         line = {"ts": time.time(), "repo": repo, "kind": kind,
-                "vuln_class": getattr(finding, "vuln_class", ""),
-                "severity": getattr(finding, "severity", "medium"),
-                "cvss_lite": cvss_lite(finding)
-                    if hasattr(finding, "vuln_class") else 0.0,
-                "file": getattr(finding, "file", ""),
-                "line": getattr(finding, "line", 0),
-                "title": getattr(finding, "title", kind), "id": finding.id,
+                "vuln_class": finding.vuln_class,
+                "severity": finding.severity,
+                "cvss_lite": cvss_lite(finding),
+                "file": finding.file, "line": finding.line,
+                "title": finding.title, "id": finding.id,
                 "extra": extra}
         path = out_root / repo / "alerts.jsonl"
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,15 +130,12 @@ def emit(repo: str, finding, kind: str, out_root: Path | None = None,
             f.write(json.dumps(line) + "\n")
     except Exception as e:
         print(f"[alert] write failed: {e}", flush=True)
-    sev = getattr(finding, "severity", "medium")
-    text = (f"[{repo}] {kind}: {sev} "
-            f"{getattr(finding, 'vuln_class', '')} @ "
-            f"{getattr(finding, 'file', '?')}:{getattr(finding, 'line', 0)}"
-            f" — {getattr(finding, 'title', '')[:80]}"
+    text = (f"[{repo}] {kind}: {finding.severity} {finding.vuln_class} @ "
+            f"{finding.file}:{finding.line} — {finding.title[:80]}"
             + (f" | {extra}" if extra else ""))
     print(f"[alert] {text}", flush=True)
     try:
-        _deliver(kind, sev, text, out_root, repo)
+        _deliver(kind, finding.severity, text, out_root, repo)
     except Exception as e:
         print(f"[alert] deliver failed: {e}", flush=True)
 

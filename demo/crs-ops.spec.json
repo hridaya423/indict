@@ -1,0 +1,40 @@
+{
+  "layout": "graph",
+  "direction": "right",
+  "style": "default",
+  "animation": "flow",
+  "title": { "prefix": "How", "highlight": "CRS-OPS", "subtitle": "AI watches your code, hunts bugs, and proves them — on repeat" },
+  "canvas": { "fps": 20, "frames": 41 },
+  "nodes": [
+    { "id": "repos", "label": "Git repos", "icon": "folder", "body": "the code we guard", "kind": "terminal", "accent": "cyan" },
+    { "id": "watch", "label": "Watch", "icon": "eye", "body": "polls for new commits", "accent": "cyan" },
+    { "id": "state", "label": "Memory", "icon": "db", "body": "last commit + known bugs", "accent": "muted" },
+    { "id": "scan", "label": "Scan", "icon": "scan", "body": "clone · map · fast scanners" },
+    { "id": "rank", "label": "Rank", "icon": "score", "body": "suspicious files first\n(semantic embeddings)" },
+    { "id": "hunt", "label": "AI hunt", "icon": "brain", "body": "6 engines read code,\nask for more context", "accent": "purple" },
+    { "id": "dedup", "label": "Dedup", "icon": "merge", "body": "same bug → one card" },
+    { "id": "judge", "label": "Judge", "icon": "guardrail", "body": "file+line exist · chain resolves\na 2nd AI attacks the claim" },
+    { "id": "gate", "label": "Real?", "kind": "decision" },
+    { "id": "dropped", "label": "Dropped", "kind": "terminal", "accent": "pink", "body": "fake or unproven" },
+    { "id": "prove", "label": "Prove", "icon": "sandbox", "body": "exploit in a locked box —\nthe claimed line must run\n(reranker picks order)", "accent": "amber" },
+    { "id": "report", "label": "Report + alert", "icon": "broadcast", "kind": "terminal", "accent": "green", "body": "markdown · SARIF · webhook" },
+    { "id": "models", "label": "Open models", "icon": "model", "body": "Devin ACP + SIE\nthink · embed · rerank", "accent": "muted" }
+  ],
+  "edges": [
+    { "from": "repos", "to": "watch" },
+    { "from": "watch", "to": "state", "label": "remember", "style": "dashed" },
+    { "from": "watch", "to": "scan", "label": "scan what changed" },
+    { "from": "scan", "to": "rank" },
+    { "from": "rank", "to": "hunt", "label": "top files" },
+    { "from": "hunt", "to": "dedup", "label": "candidate bugs" },
+    { "from": "dedup", "to": "judge" },
+    { "from": "judge", "to": "gate" },
+    { "from": "gate", "to": "dropped", "label": "fake", "accent": "pink" },
+    { "from": "gate", "to": "prove", "label": "survives" },
+    { "from": "prove", "to": "report", "label": "verified" },
+    { "from": "models", "to": "hunt", "label": "powers the AI", "accent": "purple", "style": "dashed" },
+    { "from": "report", "to": "watch", "kind": "loop", "label": "new commit → rescan", "accent": "cyan" }
+  ],
+  "footer": "the model proposes — the mechanics decide. nothing ships without proof.",
+  "signature": "CRS-OPS · AI Tinkerers"
+}
